@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Paper-trading web app: real-time market prices, fake money, no real trades ever execute.
+Crypto paper-trading web app: real-time cryptocurrency market prices, fake money, no real trades ever execute.
 
 ## MVP scope
 - Email/password auth with sessions
@@ -18,7 +18,7 @@ Paper-trading web app: real-time market prices, fake money, no real trades ever 
 - **DB access**: SQLAlchemy (async) + asyncpg, Alembic for migrations
 - **Cache / ephemeral state**: Redis — leaderboard sorted set and latest-price cache. Redis contains no authoritative account, order, cash, or holding state. The leaderboard can be rebuilt from PostgreSQL plus current provider prices; the price cache is repopulated from the provider. Use in-process WebSocket fan-out for the MVP. Add Redis Pub/Sub only if market-data ingestion or WebSocket delivery becomes a separate process.
 - **Realtime transport**: WebSockets (FastAPI native) for price ticks and portfolio/order updates
-- **Market data**: A real-time market data API (provider TBD), accessed through one adapter module so the provider can be swapped without touching business logic. Runtime uses real provider data; deterministic mock data is permitted only for automated tests and offline development. Public deployment requires a provider whose terms permit redistribution to application users.
+- **Market data**: Kraken's public REST API (ticker/OHLC/trades, no auth required) and WebSocket v2 API (real-time ticker/trade/OHLC streaming) for spot pair prices, accessed through one adapter module so the provider can be swapped without touching business logic. Runtime uses real provider data; deterministic mock data is permitted only for automated tests and offline development. Kraken's terms on bulk redistribution of real-time feeds are not fully confirmed — re-verify before public launch; public deployment requires a provider whose terms permit redistribution to application users.
 - **Frontend**: React + TypeScript
 - **Testing**: pytest (backend), Playwright via the `webapp-testing` skill (frontend/e2e)
 
@@ -26,21 +26,20 @@ Paper-trading web app: real-time market prices, fake money, no real trades ever 
 Non-negotiable — changes to these definitions require your explicit approval before implementation:
 1. Cash balance never goes negative.
 2. A buy order cannot execute for more than the account's cash balance at execution time (`price * qty <= cash`).
-3. A sell order cannot execute for more shares than the account currently holds of that symbol.
+3. A sell order cannot execute for more asset units than the account currently holds of that symbol.
 4. All money math uses integer cents or `Decimal` — never floats.
 5. Every state change (order + ledger entry + balance/holding update) commits as one atomic PostgreSQL transaction or not at all. Order execution must lock the affected account and holding rows, or provide equivalent database-level concurrency protection, so concurrent orders cannot double-spend cash or oversell holdings.
 6. Orders execute against the price at execution time, never a client-supplied price.
 7. Order processing is idempotent. Every submission has an idempotency key unique per account, enforced by a PostgreSQL unique constraint, so retries cannot double-execute.
 8. Cash and holdings are authoritative only in PostgreSQL; net worth is derived server-side from those values plus the latest approved market prices. Redis may cache derived values (net worth, leaderboard, prices), but losing Redis can only cost freshness, never financial records.
-9. Order quantity must be a positive whole number.
+9. Order quantity must be a positive amount, represented as `Decimal` with precision matching the traded pair (fractional quantities are allowed — e.g., 0.01 BTC).
 10. No cash- or holdings-mutating action — order execution or a bankruptcy trigger — may use a price older than the configured maximum age; missing or stale prices block the action instead.
-11. Market orders execute only while the market-data provider reports the regular US equities session is open. Outside regular hours, orders are rejected. The last known price may still be displayed, but only when clearly labeled as market-closed or stale.
+11. Crypto markets trade 24/7, so there is no market-hours gate. Market orders execute at any time, subject to invariant 10's staleness check. If the market-data provider reports a pair as not currently tradable (e.g., paused, cancel-only, post-only, or limit-only), orders on that pair are rejected until it reports tradable again.
 12. A bankruptcy reset atomically clears active holdings and restores starting cash, but preserves order and ledger history. The reset itself is recorded in the ledger.
 
 ## Non-goals (MVP)
 - Real money, real brokerage integration, or real order execution
 - Margin, short selling, options, futures, leverage
-- Fractional shares
 - Multi-currency accounts
 - KYC/AML or other regulatory compliance
 - Native/mobile clients
@@ -49,7 +48,7 @@ Non-negotiable — changes to these definitions require your explicit approval b
 
 ## Coding & testing expectations
 - Type-annotate all Python; keep it mypy-clean where practical. TypeScript stays in strict mode.
-- Add unit and integration tests alongside any change. Any code touching cash, orders, or holdings needs tests covering the invariants above, especially boundary cases: exact-balance buys, zero-share sells, and concurrent or duplicate orders.
+- Add unit and integration tests alongside any change. Any code touching cash, orders, or holdings needs tests covering the invariants above, especially boundary cases: exact-balance buys, zero-unit sells, and concurrent or duplicate orders.
 - Pure money-calculation unit tests may run without a database. Tests of transactions, locking, idempotency, database constraints, or concurrent orders must use a real PostgreSQL test database rather than mocked persistence.
 - Before claiming a task done, actually run the relevant tests and confirm their output using the `verification-before-completion` skill; do not infer pass or fail.
 - User-visible flows (buy, sell, leaderboard, bankruptcy reset) get a Playwright check via the `webapp-testing` skill when touched.

@@ -1,0 +1,36 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-kryptos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kryptos}
+      POSTGRES_DB: ${POSTGRES_DB:-kryptos}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - kryptos_pg_data:/var/lib/postgresql
+      - ./infra/postgres/init-test-db.sh:/docker-entrypoint-initdb.d/init-test-db.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kryptos} -d ${POSTGRES_DB:-kryptos}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - kryptos_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  kryptos_pg_data:
+  kryptos_redis_data:
