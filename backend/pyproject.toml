@@ -35,6 +35,7 @@ asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
 markers = [
     "network: requires real network access to Kraken; run explicitly with `pytest -m network`",
+    "benchmark: exercises the order-execution concurrency benchmark and appends a dated result to backend/benchmarks/RESULTS.md",
 ]
 
 [tool.ruff]
