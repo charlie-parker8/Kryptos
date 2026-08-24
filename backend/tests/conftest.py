@@ -14,6 +14,9 @@ from sqlalchemy.ext.asyncio import (
 from app.config import Settings
 from app.db import Base, get_session
 from app.main import app
+from app.market_data.fake import FakeMarketData
+from app.market_data.kraken import PairStatus, Ticker
+from app.redis_client import get_redis
 
 TEST_DATABASE_URL = "postgresql+asyncpg://kryptos:kryptos@localhost:5432/kryptos_test"
 
@@ -45,10 +48,13 @@ async def db_session(engine: AsyncEngine):
 
 
 @pytest_asyncio.fixture
-async def client(engine: AsyncEngine) -> AsyncIterator[AsyncClient]:
-    """An HTTP client for `app`, with its DB dependency overridden to use the Postgres
-    test database — `app.db.engine` is bound to the dev database at import time, so
-    requests would otherwise write through the real app against the wrong database.
+async def client(
+    engine: AsyncEngine, redis_client: redis.Redis
+) -> AsyncIterator[AsyncClient]:
+    """An HTTP client for `app`, with its DB and Redis dependencies overridden to use the
+    test database/logical DB — `app.db.engine` and `app.redis_client.redis_client` are
+    both bound at import time to whichever dev URL is in the environment, so requests
+    would otherwise write through the real app against the wrong database/cache.
     """
     test_session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
@@ -56,11 +62,16 @@ async def client(engine: AsyncEngine) -> AsyncIterator[AsyncClient]:
         async with test_session_factory() as session:
             yield session
 
+    async def override_get_redis() -> redis.Redis:
+        return redis_client
+
     app.dependency_overrides[get_session] = override_get_session
+    app.dependency_overrides[get_redis] = override_get_redis
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
     app.dependency_overrides.pop(get_session, None)
+    app.dependency_overrides.pop(get_redis, None)
 
 
 @pytest_asyncio.fixture
@@ -75,3 +86,25 @@ async def redis_client(test_settings: Settings) -> AsyncIterator[redis.Redis]:
     finally:
         await client.flushdb()
         await client.aclose()
+
+
+@pytest.fixture
+def fake_market_data(monkeypatch: pytest.MonkeyPatch) -> FakeMarketData:
+    """Patches the two live-provider entry points app.trading.execute_order actually calls
+    (app.market_data.cache.get_ticker on a cache miss, app.trading.get_pair_status —
+    pair-status is never cached this phase) with a FakeMarketData instance, following the
+    same patch-by-import-site convention as test_market_data_cache.py. FakeMarketData's own
+    get_ticker/get_pair_status take only (self, pair) — no base_url/timeout/client — so
+    these adapters absorb the extra kwargs the real functions accept.
+    """
+    fake = FakeMarketData()
+
+    async def fake_get_ticker(pair: str, **_: object) -> Ticker:
+        return await fake.get_ticker(pair)
+
+    async def fake_get_pair_status(pair: str, **_: object) -> PairStatus:
+        return await fake.get_pair_status(pair)
+
+    monkeypatch.setattr("app.market_data.cache.get_ticker", fake_get_ticker)
+    monkeypatch.setattr("app.trading.get_pair_status", fake_get_pair_status)
+    return fake

@@ -103,6 +103,7 @@ class Order(Base):
     filled_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
     )
+    rejection_reason: Mapped[str | None] = mapped_column(String(30), nullable=True)
 
     __table_args__ = (
         UniqueConstraint(
@@ -114,6 +115,15 @@ class Order(Base):
             "status IN ('pending', 'filled', 'rejected')", name="ck_orders_status_valid"
         ),
         CheckConstraint("symbol LIKE '%/USD'", name="ck_orders_symbol_usd_quoted"),
+        CheckConstraint(
+            "(status = 'rejected') = (rejection_reason IS NOT NULL)",
+            name="ck_orders_rejection_reason_matches_status",
+        ),
+        CheckConstraint(
+            "rejection_reason IS NULL OR rejection_reason IN "
+            "('insufficient_funds', 'insufficient_holdings', 'stale_price', 'pair_not_tradable')",
+            name="ck_orders_rejection_reason_valid",
+        ),
     )
 
 
