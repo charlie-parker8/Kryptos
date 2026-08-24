@@ -5,6 +5,7 @@ from decimal import Decimal
 from sqlalchemy import (
     CheckConstraint,
     ForeignKey,
+    Index,
     Numeric,
     String,
     UniqueConstraint,
@@ -56,7 +57,7 @@ class Holding(Base):
         PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     symbol: Mapped[str] = mapped_column(String(20), nullable=False)
     quantity: Mapped[Decimal] = mapped_column(Numeric(28, 10), nullable=False)
@@ -86,7 +87,7 @@ class Order(Base):
         PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
     symbol: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -116,6 +117,39 @@ class Order(Base):
     )
 
 
+Index(
+    "ix_orders_user_created_id",
+    Order.user_id,
+    Order.created_at.desc(),
+    Order.id.desc(),
+)
+
+
+class UserSession(Base):
+    """An issued login session. `token_hash` stores SHA-256(raw token) — the raw token itself
+    lives only in the client's cookie and is never persisted, so a DB read alone can't forge one.
+    """
+
+    __tablename__ = "user_sessions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+
+
 class LedgerEntry(Base):
     __tablename__ = "ledger_entries"
 
@@ -123,7 +157,7 @@ class LedgerEntry(Base):
         PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     order_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("orders.id", ondelete="SET NULL"), nullable=True, index=True
@@ -145,3 +179,11 @@ class LedgerEntry(Base):
             name="ck_ledger_entry_type_valid",
         ),
     )
+
+
+Index(
+    "ix_ledger_entries_user_created_id",
+    LedgerEntry.user_id,
+    LedgerEntry.created_at.desc(),
+    LedgerEntry.id.desc(),
+)
