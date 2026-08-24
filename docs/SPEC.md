@@ -53,6 +53,18 @@ Non-negotiable — changes to these definitions require your explicit approval b
 - Before claiming a task done, actually run the relevant tests and confirm their output using the `verification-before-completion` skill; do not infer pass or fail.
 - User-visible flows (buy, sell, leaderboard, bankruptcy reset) get a Playwright check via the `webapp-testing` skill when touched.
 
+## Benchmark plan
+`docs/metrics-benchmark-plan.md` tracks the metrics this project is meant to back with real numbers, and
+the k6/pytest benchmarks needed to produce them honestly. Consult it when working on any of
+its three milestones, and build the corresponding benchmark alongside the feature rather
+than after the fact:
+- WebSocket price fan-out / live portfolio valuation → Milestone A (`ws_latency.js`, the
+  `broadcast_at` timestamp field)
+- Market order execution, row-locking, idempotency → Milestone B (the pytest concurrency
+  test already required above doubles as this milestone's benchmark)
+- Redis price cache + leaderboard → Milestone C (`cache_effectiveness.py`,
+  `leaderboard_latency.js`)
+
 ## Avoid premature abstraction
 - No repository/service-layer scaffolding until 2-3 real call sites actually need it.
 - No plugin system, strategy pattern, or generic "provider interface" beyond the one market-data adapter explicitly needed to isolate the external API.

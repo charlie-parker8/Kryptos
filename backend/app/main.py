@@ -7,8 +7,10 @@ from sqlalchemy import text
 
 from app.config import get_settings
 from app.db import AsyncSessionLocal
+from app.routers.auth import router as auth_router
 
 app = FastAPI(title="Kryptos")
+app.include_router(auth_router)
 
 
 class HealthChecks(BaseModel):

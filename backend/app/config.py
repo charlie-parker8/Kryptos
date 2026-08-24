@@ -25,6 +25,7 @@ class Settings(BaseSettings):
 
     starting_cash_balance: Decimal = Decimal("100000.00")
     price_max_age_seconds: int = 10
+    session_ttl_seconds: int = 60 * 60 * 24 * 7  # 7 days
 
     kraken_rest_base_url: str = "https://api.kraken.com"
     kraken_ws_url: str = "wss://ws.kraken.com/v2"
