@@ -20,8 +20,11 @@ from app.config import get_settings
 from app.db import get_session
 from app.deps import get_current_user
 from app.models import Holding, Order, User
+from app.portfolio import get_portfolio_snapshot
 from app.redis_client import get_redis
 from app.trading import MarketDataUnavailableError, execute_order
+from app.ws_manager import ws_manager
+from app.ws_messages import PortfolioUpdateMessage
 
 router = APIRouter(tags=["trading"])
 
@@ -82,7 +85,7 @@ async def create_order(
 ) -> Order:
     settings = get_settings()
     try:
-        return await execute_order(
+        order = await execute_order(
             db,
             redis_client,
             settings,
@@ -97,6 +100,16 @@ async def create_order(
             status.HTTP_503_SERVICE_UNAVAILABLE,
             "Market data temporarily unavailable; retry with the same Idempotency-Key.",
         ) from exc
+
+    if order.status == "filled":
+        # A no-op if this user has no open /ws connections. execute_order itself stays free
+        # of this side effect (see app/trading.py) so its direct-call concurrency tests are
+        # unaffected.
+        snapshot = await get_portfolio_snapshot(db, redis_client, settings, user)
+        await ws_manager.send_portfolio_update(
+            user.id, PortfolioUpdateMessage(**snapshot.model_dump())
+        )
+    return order
 
 
 @router.get("/orders", response_model=list[OrderResponse])

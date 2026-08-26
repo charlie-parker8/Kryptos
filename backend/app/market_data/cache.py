@@ -7,7 +7,7 @@ the one entry point order execution should use to obtain a validated, non-stale 
 """
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import httpx
@@ -79,3 +79,27 @@ async def get_latest_ticker(
         await set_cached_ticker(client, ticker, ttl_seconds=max_age_seconds)
     ensure_fresh(ticker, max_age_seconds=max_age_seconds)
     return ticker
+
+
+async def get_ticker_for_display(
+    client: redis.Redis,
+    pair: str,
+    *,
+    base_url: str,
+    timeout: float,
+    max_age_seconds: int,
+    http_client: httpx.AsyncClient | None = None,
+) -> tuple[Ticker, bool]:
+    """Same cache-or-fetch behavior as `get_latest_ticker`, but for read-only display (e.g.
+    portfolio valuation) rather than an order-mutating action: invariant 10 only blocks
+    cash/holdings-mutating actions on a stale price, so this never raises — it returns
+    `(ticker, is_stale)` and lets the caller show a stale-flagged last-known price instead.
+    """
+    ticker = await get_cached_ticker(client, pair)
+    if ticker is None:
+        ticker = await get_ticker(
+            pair, base_url=base_url, timeout=timeout, client=http_client
+        )
+        await set_cached_ticker(client, ticker, ttl_seconds=max_age_seconds)
+    age_seconds = (datetime.now(UTC) - ticker.as_of).total_seconds()
+    return ticker, age_seconds > max_age_seconds
