@@ -7,14 +7,17 @@ XBT for Bitcoin); _KRAKEN_REST_ASSET_ALIASES maps canonical base assets to those
 only when constructing REST queries. Nothing outside this module ever sees a Kraken-native code.
 """
 
+import json
 import ssl
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 import httpx
 import truststore
+import websockets
 
 
 class KrakenError(RuntimeError):
@@ -130,3 +133,62 @@ async def get_pair_status(
     )
     status = data["status"]
     return PairStatus(pair=pair, status=status, tradable=status == _TRADABLE_STATUS)
+
+
+def parse_ticker_message(payload: dict[str, Any]) -> list[Ticker]:
+    """Pure — no I/O. Kraken's WS v2 ticker channel sends `{"channel": "ticker", "type":
+    "snapshot"|"update", "data": [{"symbol": ..., "bid": ..., "ask": ..., "last": ...}, ...]}`;
+    everything else on the same connection (subscribe acks, heartbeats, other channels)
+    returns []. `symbol` arrives already in canonical form (e.g. "BTC/USD") — Kraken's WS v2
+    API uses the same pair spelling this module uses everywhere outside REST calls, unlike
+    the legacy codes _KRAKEN_REST_ASSET_ALIASES translates for the REST endpoints above.
+    """
+    if payload.get("channel") != "ticker" or payload.get("type") not in (
+        "snapshot",
+        "update",
+    ):
+        return []
+
+    now = datetime.now(UTC)
+    tickers: list[Ticker] = []
+    for item in payload.get("data", []):
+        try:
+            tickers.append(
+                Ticker(
+                    pair=item["symbol"],
+                    bid=Decimal(str(item["bid"])),
+                    ask=Decimal(str(item["ask"])),
+                    last=Decimal(str(item["last"])),
+                    as_of=now,
+                )
+            )
+        except (KeyError, InvalidOperation):
+            continue  # a malformed entry must not drop the rest of a batch
+    return tickers
+
+
+async def stream_tickers(
+    pairs: list[str],
+    ws_url: str,
+    *,
+    on_tick: Callable[[Ticker], Awaitable[None]],
+) -> None:
+    """Long-lived: connects to Kraken's WS v2 API, subscribes to the ticker channel for
+    `pairs`, and calls `on_tick()` for every parsed Ticker, forever — until the connection
+    drops or is cancelled. Raises on connection/setup failure; reconnect-with-backoff is the
+    caller's job (app.price_stream) so this stays a single, directly testable unit (parsing
+    is exercised via parse_ticker_message; this function itself is only exercised by the
+    `network`-marked integration test, same as get_ticker/get_pair_status above).
+    """
+    # Same OS-trust-store rationale as _fetch_public's httpx client.
+    ssl_context = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    async with websockets.connect(ws_url, ssl=ssl_context) as ws:
+        await ws.send(
+            json.dumps(
+                {"method": "subscribe", "params": {"channel": "ticker", "symbol": pairs}}
+            )
+        )
+        async for raw_message in ws:
+            payload = json.loads(raw_message)
+            for ticker in parse_ticker_message(payload):
+                await on_tick(ticker)

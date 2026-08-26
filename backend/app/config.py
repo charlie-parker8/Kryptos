@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     kraken_ws_url: str = "wss://ws.kraken.com/v2"
     kraken_request_timeout_seconds: float = 5.0
 
+    supported_pairs: list[str] = Field(
+        default_factory=lambda: ["BTC/USD", "ETH/USD", "SOL/USD"]
+    )
+
 
 @lru_cache
 def get_settings() -> Settings:

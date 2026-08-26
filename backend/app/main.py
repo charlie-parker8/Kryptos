@@ -1,3 +1,7 @@
+import asyncio
+import contextlib
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Literal
 
 import redis.asyncio as redis
@@ -7,12 +11,30 @@ from sqlalchemy import text
 
 from app.config import get_settings
 from app.db import AsyncSessionLocal
+from app.price_stream import run_price_stream
+from app.redis_client import redis_client
 from app.routers.auth import router as auth_router
 from app.routers.orders import router as orders_router
+from app.routers.portfolio import router as portfolio_router
+from app.routers.ws import router as ws_router
 
-app = FastAPI(title="Kryptos")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    task = asyncio.create_task(run_price_stream(get_settings(), redis_client))
+    try:
+        yield
+    finally:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+
+app = FastAPI(title="Kryptos", lifespan=lifespan)
 app.include_router(auth_router)
 app.include_router(orders_router)
+app.include_router(portfolio_router)
+app.include_router(ws_router)
 
 
 class HealthChecks(BaseModel):

@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from app.config import Settings
-from app.db import Base, get_session
+from app.db import Base, get_session, get_session_factory
 from app.main import app
 from app.market_data.fake import FakeMarketData
 from app.market_data.kraken import PairStatus, Ticker
@@ -55,6 +55,12 @@ async def client(
     test database/logical DB — `app.db.engine` and `app.redis_client.redis_client` are
     both bound at import time to whichever dev URL is in the environment, so requests
     would otherwise write through the real app against the wrong database/cache.
+
+    Also overrides get_session_factory (used by the /ws route and, indirectly via its
+    default, app.price_stream) to the same test session factory — otherwise those two
+    deliberately bypass Depends(get_session) for connection-pinning reasons (see
+    app/db.py's get_session_factory docstring) and would silently hit the real dev
+    database instead of this test's.
     """
     test_session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
@@ -67,11 +73,24 @@ async def client(
 
     app.dependency_overrides[get_session] = override_get_session
     app.dependency_overrides[get_redis] = override_get_redis
+    app.dependency_overrides[get_session_factory] = lambda: test_session_factory
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
     app.dependency_overrides.pop(get_session, None)
     app.dependency_overrides.pop(get_redis, None)
+    app.dependency_overrides.pop(get_session_factory, None)
+
+
+@pytest_asyncio.fixture
+async def session_factory(
+    engine: AsyncEngine,
+) -> async_sessionmaker[AsyncSession]:
+    """The same test session factory the `client`/`ws_client` fixtures wire into the app,
+    exposed directly for tests that call app.price_stream.handle_tick or similar internals
+    outside the HTTP/WS layer.
+    """
+    return async_sessionmaker(engine, expire_on_commit=False)
 
 
 @pytest_asyncio.fixture
