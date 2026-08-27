@@ -32,6 +32,15 @@ async def portfolio_ws(
     ),
     redis_client: Redis = Depends(get_redis),  # noqa: B008 — FastAPI's own DI idiom
 ) -> None:
+    # CSWSH guard: the handshake isn't subject to CORS, so a malicious page could otherwise
+    # open an authenticated socket with the victim's cookie. A browser always sends `Origin`
+    # on a WS upgrade and can't forge it cross-site; a non-browser client (tests, k6) sends
+    # none and is allowed.
+    origin = websocket.headers.get("origin")
+    if origin is not None and origin not in get_settings().allowed_origins:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
     # Auth happens before accept() — a WebSocket route can't raise HTTPException the way an
     # HTTP route can, so an invalid/missing cookie is rejected by closing instead. A
     # short-lived session (not Depends(get_session)) is opened just for this one lookup:

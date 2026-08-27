@@ -21,7 +21,18 @@ class Settings(BaseSettings):
     environment: str = "development"
 
     database_url: str = Field(...)
+    # Managed Postgres (Supabase pooler) requires TLS; local docker-compose Postgres does
+    # not. Set KRYPTOS_DATABASE_SSL=true in the hosted environment only.
+    database_ssl: bool = False
     redis_url: str = "redis://localhost:6379/0"
+
+    # The browser origin the SPA is served from. Same-origin in local dev (Vite proxy);
+    # in the split deploy it's https://app.<domain>. Drives the CORS allowlist, the
+    # WebSocket Origin check, and the state-changing-request Origin check.
+    frontend_origin: str = "http://localhost:5173"
+    # Host header allowlist (Starlette TrustedHostMiddleware). "*" disables the check —
+    # fine for local dev; set KRYPTOS_ALLOWED_HOSTS='["api.<domain>"]' in the hosted env.
+    allowed_hosts: list[str] = Field(default_factory=lambda: ["*"])
 
     starting_cash_balance: Decimal = Decimal("100000.00")
     price_max_age_seconds: int = 10
@@ -34,6 +45,12 @@ class Settings(BaseSettings):
     supported_pairs: list[str] = Field(
         default_factory=lambda: ["BTC/USD", "ETH/USD", "SOL/USD"]
     )
+
+    @property
+    def allowed_origins(self) -> list[str]:
+        """The exact browser origins allowed to call the API / open the WebSocket. One
+        entry today; a list so CORSMiddleware and the Origin checks share one source."""
+        return [self.frontend_origin]
 
 
 @lru_cache

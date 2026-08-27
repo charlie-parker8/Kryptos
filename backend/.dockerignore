@@ -1,0 +1,20 @@
+# Build context is backend/. Keep it to what the image actually needs:
+# pyproject.toml, uv.lock, app/, alembic/, alembic.ini, docker-entrypoint.sh.
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.python-version
+
+tests/
+benchmarks/
+scripts/
+
+Dockerfile
+.dockerignore
+
+# local CA bundles used only as a build --secret (never COPYed into the image)
+*.pem

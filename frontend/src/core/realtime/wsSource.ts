@@ -7,6 +7,10 @@
  * Reconnects with capped exponential backoff, mirroring the backend's own
  * `run_price_stream` loop; the backend re-sends a fresh `portfolio_update` on every
  * (re)connect, so no client-side catch-up is needed.
+ *
+ * Local dev: `VITE_WS_URL` is unset and the URL is derived from `window.location` (Vite
+ * proxies `/ws` to :8000). Split deploy: `VITE_WS_URL` is `wss://api.<domain>/ws`; the
+ * session cookie rides the same-site upgrade automatically.
  */
 
 import { setConnectionStatus } from "@/core/state/connectionStore";
@@ -16,6 +20,8 @@ const INITIAL_BACKOFF_MS = 1_000;
 const MAX_BACKOFF_MS = 30_000;
 
 function wsUrl(): string {
+  const configured = import.meta.env.VITE_WS_URL;
+  if (configured) return configured;
   const scheme = window.location.protocol === "https:" ? "wss" : "ws";
   return `${scheme}://${window.location.host}/ws`;
 }

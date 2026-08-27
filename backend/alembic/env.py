@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 from app import models  # noqa: F401  (populates Base.metadata)
 from app.config import get_settings
-from app.db import Base
+from app.db import CONNECT_ARGS, Base
 
 config = context.config
 if config.config_file_name is not None:
@@ -28,6 +28,7 @@ async def run_migrations_online() -> None:
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         future=True,
+        connect_args=CONNECT_ARGS,
     )
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)

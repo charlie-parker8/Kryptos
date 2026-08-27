@@ -22,6 +22,7 @@ from app.db import get_session
 from app.deps import get_current_user
 from app.models import Holding, Order, User
 from app.portfolio import get_portfolio_snapshot
+from app.rate_limit import rate_limit
 from app.redis_client import get_redis
 from app.trading import MarketDataUnavailableError, execute_order
 from app.ws_manager import ws_manager
@@ -30,6 +31,11 @@ from app.ws_messages import PortfolioUpdateMessage
 router = APIRouter(tags=["trading"])
 
 _SYMBOL_PATTERN = r"^[A-Z0-9]{1,16}/USD$"
+
+# Per-IP ceiling on order submission — a runaway client loop shouldn't be able to hammer
+# the provider/DB. Idempotency (app.trading) already makes honest retries free; this is
+# purely an abuse bound, so it's set well above any realistic manual trading rate.
+_orders_rate_limit = rate_limit("orders", limit=100, window_seconds=60)
 
 
 class CreateOrderRequest(BaseModel):
@@ -73,7 +79,10 @@ class HoldingResponse(BaseModel):
 
 
 @router.post(
-    "/orders", response_model=OrderResponse, status_code=status.HTTP_201_CREATED
+    "/orders",
+    response_model=OrderResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(_orders_rate_limit)],
 )
 async def create_order(
     payload: CreateOrderRequest,

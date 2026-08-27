@@ -22,8 +22,13 @@ from app.routers.ws import portfolio_ws
 
 
 class FakeWebSocket:
-    def __init__(self, cookies: dict[str, str] | None = None) -> None:
+    def __init__(
+        self,
+        cookies: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> None:
         self.cookies = cookies or {}
+        self.headers = headers or {}
         self.accepted = False
         self.closed_code: int | None = None
         self.sent: list[dict[str, object]] = []

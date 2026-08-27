@@ -14,6 +14,11 @@ backend/.python-version
 .env
 .env.local
 
+# Local CA bundle (TLS-inspecting proxy/AV root) — passed to `docker build --secret` only
+hostca.pem
+host-ca-bundle.pem
+*-ca-bundle.pem
+
 # Docker
 infra/postgres/data/
 

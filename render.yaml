@@ -1,0 +1,35 @@
+# Render Blueprint for the Kryptos API (https://render.com/docs/blueprint-spec).
+# The service can also be created from the dashboard — this file just pins the config.
+#
+# Single free instance by design: the app runs the price-stream + leaderboard-refresh
+# asyncio tasks and the in-process WebSocket fan-out, so it must never scale past one
+# process (the Dockerfile hard-codes `--workers 1`; do not raise `numInstances`).
+services:
+  - type: web
+    name: kryptos-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: KRYPTOS_ENVIRONMENT
+        value: production
+      - key: KRYPTOS_DATABASE_SSL
+        value: "true"
+      - key: KRYPTOS_STARTING_CASH_BALANCE
+        value: "100000.00"
+      # Set these in the Render dashboard (Environment → Secret) — never commit them:
+      #   KRYPTOS_DATABASE_URL   postgresql+asyncpg://postgres.<ref>:<pw>@aws-0-<region>.pooler.supabase.com:5432/postgres
+      #   KRYPTOS_REDIS_URL      rediss://default:<pw>@<host>:<port>
+      #   KRYPTOS_FRONTEND_ORIGIN   https://app.<your-domain>
+      - key: KRYPTOS_DATABASE_URL
+        sync: false
+      - key: KRYPTOS_REDIS_URL
+        sync: false
+      - key: KRYPTOS_FRONTEND_ORIGIN
+        sync: false
+      # Optional host-header lockdown. If set, it MUST list every hostname the service
+      # answers on, or Render's own health check can 400:
+      #   KRYPTOS_ALLOWED_HOSTS   ["api.<your-domain>", "kryptos-api.onrender.com"]

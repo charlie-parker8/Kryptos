@@ -1,13 +1,18 @@
 /**
- * The one place the frontend talks to the FastAPI backend over HTTP. Everything is
- * same-origin (the Vite dev proxy forwards `/auth` `/orders` `/portfolio` to :8000), so the
- * httponly `kryptos_session` cookie rides along on its own — no `Authorization` header, no
- * token handling here.
+ * The one place the frontend talks to the FastAPI backend over HTTP.
+ *
+ * Local dev: `VITE_API_URL` is unset, so paths stay relative and the Vite dev proxy makes
+ * them same-origin. Split deploy: `VITE_API_URL` is the API origin (https://api.<domain>);
+ * `credentials: "include"` sends the httponly `kryptos_session` cookie cross-origin, which
+ * works because api.<domain> and app.<domain> are the same site. No `Authorization` header,
+ * no token handling here.
  *
  * Money is a decimal **string** on the wire (see `core/realtime/types.ts`); this layer never
  * parses it. A non-2xx response throws `ApiError` carrying the parsed body so callers can
  * branch on `status` (401 → session gone) or the error payload.
  */
+
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? "";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -51,7 +56,7 @@ async function request(
   body?: unknown,
   extraHeaders?: Record<string, string>,
 ): Promise<unknown> {
-  const init: RequestInit = { method, credentials: "same-origin" };
+  const init: RequestInit = { method, credentials: "include" };
   const headers: Record<string, string> = { ...extraHeaders };
   if (body !== undefined) {
     headers["Content-Type"] = "application/json";
@@ -59,7 +64,7 @@ async function request(
   }
   init.headers = headers;
 
-  const response = await fetch(path, init);
+  const response = await fetch(`${API_BASE_URL}${path}`, init);
 
   const parsed = await parseBody(response);
   if (!response.ok) throw new ApiError(response.status, parsed);
