@@ -5,9 +5,8 @@ import { dirOf } from "@/core/lib/direction";
 import { AnimatedNumber } from "@/core/primitives/AnimatedNumber";
 import { DirGlyph } from "@/core/primitives/DirGlyph";
 import { Marquee } from "@/core/primitives/Marquee";
-import { REFERENCE_PRICE } from "@/core/realtime/mockSource";
 import { PAIRS, type Pair } from "@/core/realtime/types";
-import { useTick } from "@/core/state/selectors";
+import { useSessionAnchor, useTick } from "@/core/state/selectors";
 
 export function TapeTicker() {
   return (
@@ -26,7 +25,8 @@ export function TapeTicker() {
 
 const TapeItem = memo(function TapeItem({ pair }: { pair: Pair }) {
   const tick = useTick(pair);
-  const change = tick ? pctChange(REFERENCE_PRICE[pair], tick.last) : 0;
+  const anchor = useSessionAnchor(pair);
+  const change = tick && anchor ? pctChange(anchor, tick.last) : 0;
   const dir = dirOf(change);
   return (
     <span className="inline-flex items-center gap-2 whitespace-nowrap">

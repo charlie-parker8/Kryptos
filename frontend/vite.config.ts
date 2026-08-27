@@ -14,18 +14,17 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    // ── Enabled in the backend-integration phase (see the plan). The prototypes
-    // run on 100% mock data and never call the API. Same-origin proxying keeps the
-    // httponly `kryptos_session` cookie and the WebSocket upgrade working without
-    // any CORS middleware on the FastAPI side.
-    //
-    // proxy: {
-    //   '/auth': 'http://localhost:8000',
-    //   '/orders': 'http://localhost:8000',
-    //   '/portfolio': 'http://localhost:8000',
-    //   '/holdings': 'http://localhost:8000',
-    //   '/health': 'http://localhost:8000',
-    //   '/ws': { target: 'ws://localhost:8000', ws: true },
-    // },
+    // Same-origin proxy to the FastAPI backend on :8000. Keeps the httponly
+    // `kryptos_session` cookie and the `/ws` upgrade working with no CORS
+    // middleware on the FastAPI side. Set `?mock` / `?frozen` in the URL to run
+    // the app on the deterministic mock feed with no backend at all.
+    proxy: {
+      '/auth': 'http://localhost:8000',
+      '/orders': 'http://localhost:8000',
+      '/portfolio': 'http://localhost:8000',
+      '/holdings': 'http://localhost:8000',
+      '/health': 'http://localhost:8000',
+      '/ws': { target: 'ws://localhost:8000', ws: true },
+    },
   },
 })

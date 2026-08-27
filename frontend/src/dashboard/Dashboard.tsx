@@ -1,15 +1,18 @@
+import { Link } from "react-router";
+
 import { formatClock } from "@/core/lib/format";
 import { formatUsd } from "@/core/lib/money";
 import { ComingSoon } from "@/core/primitives/ComingSoon";
 import { Delta } from "@/core/primitives/Delta";
-import { MOCK_STANDINGS } from "@/core/realtime/mockSource";
 import { PAIRS } from "@/core/realtime/types";
 import { useDashboardData } from "@/core/useDashboardData";
+import { MOCK_STANDINGS } from "@/leaderboard/placeholderData";
 import { Positions } from "./Positions";
 import { SplitFlapNumber } from "./SplitFlapNumber";
 
 export function Dashboard() {
   const { netWorth, pnlVsStart, startingCash, asOf } = useDashboardData();
+  const startingCashLabel = startingCash ? formatUsd(startingCash) : "—";
 
   return (
     <div className="mx-auto max-w-5xl space-y-8">
@@ -39,7 +42,7 @@ export function Dashboard() {
           <p className="mt-3 flex items-center gap-3 text-sm">
             <Delta abs={pnlVsStart.abs} pct={pnlVsStart.pct} />
             <span className="text-muted">
-              against the {formatUsd(startingCash)} you started with
+              against the {startingCashLabel} you started with
             </span>
           </p>
         ) : null}
@@ -53,7 +56,10 @@ export function Dashboard() {
       </section>
 
       <section className="grid gap-3 sm:grid-cols-3">
-        <article className="border border-border p-4">
+        <Link
+          to="/leaderboard"
+          className="border border-border p-4 transition-colors hover:border-accent"
+        >
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-medium uppercase tracking-wide text-fg-strong">
               Leaderboard
@@ -64,7 +70,7 @@ export function Dashboard() {
             {MOCK_STANDINGS.slice(0, 4).map((row) => (
               <li
                 key={row.rank}
-                className={`flex justify-between ${"isYou" in row && row.isYou ? "text-accent" : "text-muted"}`}
+                className={`flex justify-between ${row.isYou ? "text-accent" : "text-muted"}`}
               >
                 <span>
                   {row.rank}. {row.handle}
@@ -73,7 +79,7 @@ export function Dashboard() {
               </li>
             ))}
           </ol>
-        </article>
+        </Link>
 
         <article className="border border-border p-4">
           <div className="flex items-center justify-between">
@@ -83,9 +89,8 @@ export function Dashboard() {
             <ComingSoon />
           </div>
           <p className="mt-3 text-xs leading-relaxed text-muted">
-            If net worth reaches $0, the account resets to{" "}
-            {formatUsd(startingCash)} and holdings clear. Order and ledger
-            history is kept.
+            If net worth reaches $0, the account resets to {startingCashLabel} and
+            holdings clear. Order and ledger history is kept.
           </p>
         </article>
 
@@ -96,7 +101,7 @@ export function Dashboard() {
           <dl className="mt-3 space-y-1.5 font-mono text-xs text-muted">
             <div className="flex justify-between">
               <dt>Starting cash</dt>
-              <dd className="text-fg">{formatUsd(startingCash)}</dd>
+              <dd className="text-fg">{startingCashLabel}</dd>
             </div>
             <div className="flex justify-between">
               <dt>Pairs</dt>

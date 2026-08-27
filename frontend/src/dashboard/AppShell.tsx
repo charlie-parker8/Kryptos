@@ -1,22 +1,25 @@
-import type { ReactNode } from "react";
+import { NavLink, Outlet } from "react-router";
 
+import { RealtimeConnector } from "@/app/RealtimeConnector";
 import { LiveDot } from "@/core/primitives/LiveDot";
 import { useIsConnected } from "@/core/state/selectors";
 import { AccountSummary } from "./AccountSummary";
+import { AccountMenu } from "./AccountMenu";
 import { MarketLadder } from "./MarketLadder";
 import { TapeTicker } from "./TapeTicker";
 import { ThemeToggle } from "./ThemeToggle";
 
 const NAV = [
-  { label: "Dashboard", active: true },
-  { label: "Trade", active: false },
-  { label: "Leaderboard", active: false },
+  { label: "Dashboard", to: "/" },
+  { label: "Trade", to: "/trade" },
+  { label: "Leaderboard", to: "/leaderboard" },
 ];
 
-export function AppShell({ children }: { children: ReactNode }) {
+export function AppShell() {
   const connected = useIsConnected();
   return (
     <div className="flex min-h-dvh flex-col bg-bg font-ui text-fg lg:h-dvh">
+      <RealtimeConnector />
       <header className="flex h-12 shrink-0 items-center justify-between border-b border-border px-4">
         <div className="flex items-center gap-6">
           <span className="font-mono text-sm font-semibold tracking-tight text-fg-strong">
@@ -24,23 +27,25 @@ export function AppShell({ children }: { children: ReactNode }) {
           </span>
           <nav className="hidden items-center gap-1 text-[0.8125rem] sm:flex">
             {NAV.map((item) => (
-              <span
-                key={item.label}
-                className={
-                  item.active
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.to === "/"}
+                className={({ isActive }) =>
+                  isActive
                     ? "rounded-control bg-surface-2 px-2.5 py-1 font-medium text-fg-strong"
-                    : "px-2.5 py-1 text-muted"
+                    : "px-2.5 py-1 text-muted transition-colors hover:text-fg"
                 }
-                title={item.active ? undefined : "Coming soon"}
               >
                 {item.label}
-              </span>
+              </NavLink>
             ))}
           </nav>
         </div>
         <div className="flex items-center gap-4">
           <LiveDot connected={connected} />
           <ThemeToggle />
+          <AccountMenu />
         </div>
       </header>
 
@@ -50,7 +55,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <AccountSummary />
         </aside>
         <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:overflow-y-auto">
-          {children}
+          <Outlet />
         </main>
       </div>
 
