@@ -6,8 +6,8 @@ FROM python:3.13-slim-bookworm
 COPY --from=ghcr.io/astral-sh/uv:0.9.30 /uv /uvx /bin/
 
 # ca-certificates: app/market_data/kraken.py verifies TLS against the OS trust store via
-# `truststore`, and the Supabase pooler + Redis Cloud connections are TLS — all need the
-# system CA bundle present.
+# `truststore`, and the Supabase pooler connection is TLS — both need the system CA bundle
+# present. (Render Key Value is reached over the private network without TLS.)
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates \
  && rm -rf /var/lib/apt/lists/*

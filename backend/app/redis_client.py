@@ -10,9 +10,10 @@ import redis.asyncio as redis
 
 from app.config import get_settings
 
-# `from_url` handles rediss:// (TLS) for Redis Cloud automatically. Cap the pool well under
-# the free plan's 30-connection limit, and add connection-health hygiene for a link that
-# now crosses the public internet.
+# In production this is Render Key Value reached over Render's private network
+# (redis://, no TLS); `from_url` also handles rediss:// if the URL ever points at an
+# external TLS endpoint. Cap the pool well under the free plan's 50-connection limit, and
+# keep the connection-health hygiene — a private link can still drop.
 redis_client = redis.from_url(
     get_settings().redis_url,
     max_connections=20,
