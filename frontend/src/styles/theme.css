@@ -1,0 +1,177 @@
+/*
+  Kryptos — the "trading desk" identity.
+  A dimmed trading room: deep slate ink (not black), terminal amber (Bloomberg / CRT
+  phosphor heritage, not neon), muted sage/brick for up/down so a screen full of them
+  stays calm. Hard 4px corners, 1px rules, no glow. Split-flap net-worth board and a
+  ticker tape welded to the bottom edge are the signatures.
+
+  Dark is the home mode; light is a bright trading floor / printed ledger. Two things stay
+  dark in both modes because they are physical objects: the flap board and the tape.
+*/
+
+:root {
+  /* shared */
+  --k-font-display:
+    "IBM Plex Sans Variable", ui-sans-serif, system-ui, sans-serif;
+  --k-font-ui: "IBM Plex Sans Variable", ui-sans-serif, system-ui, sans-serif;
+  --k-font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --k-radius-card: 4px;
+  --k-radius-control: 3px;
+
+  /* dark palette — the default */
+  --k-bg: #10141a;
+  --k-surface: #161b23;
+  --k-surface-2: #1b212b;
+  --k-fg: #d9dde4;
+  --k-fg-strong: #f3f5f8;
+  --k-muted: #8791a0;
+  --k-border: #2a323e;
+  --k-hairline: #212832;
+  --k-accent: #e0a34a;
+  --k-accent-fg: #14181e;
+  --k-up: #63ab7f;
+  --k-down: #d46a4c;
+}
+
+:root[data-theme="light"] {
+  --k-bg: #f6f5f1;
+  --k-surface: #ffffff;
+  --k-surface-2: #efece3;
+  --k-fg: #363b42;
+  --k-fg-strong: #14181e;
+  --k-muted: #63676e;
+  --k-border: #dcd7cb;
+  --k-hairline: #e9e5db;
+  --k-accent: #8a5a0c;
+  --k-accent-fg: #ffffff;
+  --k-up: #2f7d4f;
+  --k-down: #ad4f29;
+}
+
+/* ── Split-flap net-worth board ─────────────────────────────────────────────── */
+.flap {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 3px;
+  font-family: var(--k-font-mono);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  perspective: 800px;
+}
+.flap-cell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0.66em;
+  padding: 0.13em 0.04em;
+  color: #eef1f4;
+  background: #1e242e;
+  border: 1px solid #0c0f14;
+  border-radius: 3px;
+  box-shadow:
+    inset 0 1px 0 #2c343f,
+    inset 0 -1px 0 #14191f;
+}
+.flap-cell::after {
+  content: "";
+  position: absolute;
+  inset-inline: 1px;
+  top: 50%;
+  height: 1px;
+  background: rgba(0, 0, 0, 0.45);
+  transform: translateY(-0.5px);
+}
+.flap-cur,
+.flap-punct,
+.flap-sign {
+  display: inline-flex;
+  align-items: flex-end;
+  padding-bottom: 0.06em;
+}
+.flap-cur {
+  color: var(--k-accent);
+  font-size: 0.66em;
+  align-self: center;
+  padding-bottom: 0;
+  margin-right: 0.06em;
+}
+.flap-punct,
+.flap-sign {
+  color: var(--k-fg-strong);
+  min-width: 0.24em;
+  justify-content: center;
+}
+.flap-char {
+  display: inline-block;
+  transform-origin: 50% 0;
+  backface-visibility: hidden;
+  animation: flap-flip 240ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes flap-flip {
+  0% {
+    transform: rotateX(-88deg);
+    opacity: 0.25;
+  }
+  55% {
+    transform: rotateX(9deg);
+    opacity: 1;
+  }
+  100% {
+    transform: rotateX(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .flap-char {
+    animation: none;
+  }
+}
+
+/* ── Ticker tape (always a dark strip, both modes) ──────────────────────────── */
+.tape {
+  --k-fg-strong: #f3f5f8;
+  --k-muted: #808894;
+  --k-accent: #e0a34a;
+  --k-up: #63ab7f;
+  --k-down: #d97a52;
+  font-family: var(--k-font-mono);
+  font-size: 0.8125rem;
+  letter-spacing: 0.02em;
+  color: #b9bec7;
+  background: #0b0e13;
+  border-top: 1px solid #23282f;
+}
+
+/* ── Market ladder rows ────────────────────────────────────────────────────── */
+.ladder-row {
+  border-bottom: 1px solid var(--k-hairline);
+}
+.ladder-row:hover {
+  background: var(--k-surface-2);
+}
+
+/* ── Ledger table ─────────────────────────────────────────────────────────── */
+.ledger th {
+  font-family: var(--k-font-ui);
+  font-weight: 500;
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--k-muted);
+  border-bottom: 1px solid var(--k-border);
+  padding: 0.5rem 0.75rem;
+}
+.ledger td {
+  border-bottom: 1px solid var(--k-hairline);
+  padding: 0.6rem 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+.ledger tr:last-child td {
+  border-bottom: none;
+}
+
+/* Flash: a quick colour shift, no background. */
+.k-animated-number {
+  transition: color 550ms cubic-bezier(0.16, 1, 0.3, 1);
+}
