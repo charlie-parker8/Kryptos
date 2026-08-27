@@ -11,9 +11,11 @@ from sqlalchemy import text
 
 from app.config import get_settings
 from app.db import AsyncSessionLocal
+from app.leaderboard import run_leaderboard_refresh
 from app.price_stream import run_price_stream
 from app.redis_client import redis_client
 from app.routers.auth import router as auth_router
+from app.routers.leaderboard import router as leaderboard_router
 from app.routers.orders import router as orders_router
 from app.routers.portfolio import router as portfolio_router
 from app.routers.ws import router as ws_router
@@ -21,13 +23,19 @@ from app.routers.ws import router as ws_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    task = asyncio.create_task(run_price_stream(get_settings(), redis_client))
+    settings = get_settings()
+    tasks = [
+        asyncio.create_task(run_price_stream(settings, redis_client)),
+        asyncio.create_task(run_leaderboard_refresh(settings, redis_client)),
+    ]
     try:
         yield
     finally:
-        task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await task
+        for task in tasks:
+            task.cancel()
+        for task in tasks:
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
 
 
 app = FastAPI(title="Kryptos", lifespan=lifespan)
@@ -35,6 +43,7 @@ app.include_router(auth_router)
 app.include_router(orders_router)
 app.include_router(portfolio_router)
 app.include_router(ws_router)
+app.include_router(leaderboard_router)
 
 
 class HealthChecks(BaseModel):

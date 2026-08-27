@@ -24,3 +24,14 @@ class PriceTickMessage(BaseModel):
 
 class PortfolioUpdateMessage(PortfolioSnapshot):
     type: Literal["portfolio_update"] = "portfolio_update"
+
+
+class BankruptcyResetMessage(BaseModel):
+    """Pushed to one user's connections when their net worth hit $0 and the account was
+    reset (see app.bankruptcy). A `portfolio_update` with the restored balances follows.
+    """
+
+    type: Literal["bankruptcy_reset"] = "bankruptcy_reset"
+    starting_cash_balance: Decimal
+    cleared_symbols: list[str]
+    reset_at: datetime

@@ -12,6 +12,7 @@ import redis.asyncio as redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app import bankruptcy, leaderboard
 from app.config import Settings
 from app.db import AsyncSessionLocal
 from app.market_data.cache import set_cached_ticker
@@ -124,6 +125,14 @@ async def _push_portfolio_updates_to_holders(
             await ws_manager.send_portfolio_update(
                 user_id, PortfolioUpdateMessage(**snapshot.model_dump())
             )
+            await leaderboard.update_score(redis_client, user_id, snapshot.net_worth)
+            # Price movement is what actually pushes an account to $0 — this is the primary
+            # bankruptcy trigger. Gate on the (tolerant) snapshot so the hot path only pays
+            # for the locked, strict re-check when a reset is plausible.
+            if snapshot.net_worth <= 0:
+                await bankruptcy.check_and_broadcast(
+                    db, redis_client, settings, user
+                )
 
 
 def _now_ms() -> int:
