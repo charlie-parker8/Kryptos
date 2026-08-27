@@ -9,6 +9,10 @@ import { DECIMAL_RE, estimateNotional, formatQty, formatUsd } from "@/core/lib/m
 import { isStale } from "@/core/lib/staleness";
 import { StaleBadge } from "@/core/primitives/StaleBadge";
 import { PAIRS, type Pair } from "@/core/realtime/types";
+import {
+  setChartPair,
+  useChartSettingsStore,
+} from "@/core/state/chartSettingsStore";
 import { useCash, useHolding, useTick } from "@/core/state/selectors";
 
 type Result =
@@ -32,7 +36,8 @@ function validQuantity(raw: string): boolean {
 }
 
 export function OrderTicket() {
-  const [pair, setPair] = useState<Pair>("BTC/USD");
+  // Pair is shared with the chart (and persisted) so the two panels stay in lock-step.
+  const pair = useChartSettingsStore((s) => s.pair);
   const [side, setSide] = useState<OrderSide>("buy");
   const [quantity, setQuantity] = useState("");
   const [result, setResult] = useState<Result | null>(null);
@@ -144,7 +149,7 @@ export function OrderTicket() {
         <select
           value={pair}
           onChange={(e) => {
-            setPair(e.target.value as Pair);
+            setChartPair(e.target.value as Pair);
             resetIntent();
           }}
           className="w-full rounded-control border border-border bg-bg px-3 py-2 font-mono text-sm text-fg-strong outline-none focus:border-accent"

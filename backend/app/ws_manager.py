@@ -12,6 +12,7 @@ from fastapi import WebSocket
 
 from app.ws_messages import (
     BankruptcyResetMessage,
+    CandleUpdateMessage,
     PortfolioUpdateMessage,
     PriceTickMessage,
 )
@@ -39,6 +40,15 @@ class ConnectionManager:
 
     async def broadcast_price_tick(self, message: PriceTickMessage) -> None:
         """Prices aren't per-user — every connected client gets every tick."""
+        payload = message.model_dump(mode="json")
+        for user_id, connections in list(self._by_user.items()):
+            for websocket in list(connections):
+                await self._send_or_disconnect(user_id, websocket, payload)
+
+    async def broadcast_candle_update(self, message: CandleUpdateMessage) -> None:
+        """Candles aren't per-user — every connected client gets every update and keeps
+        only the pair+interval its chart shows (mirrors broadcast_price_tick).
+        """
         payload = message.model_dump(mode="json")
         for user_id, connections in list(self._by_user.items()):
             for websocket in list(connections):

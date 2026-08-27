@@ -23,6 +23,7 @@ export default defineConfig({
       '/orders': 'http://localhost:8000',
       '/portfolio': 'http://localhost:8000',
       '/holdings': 'http://localhost:8000',
+      '/candles': 'http://localhost:8000',
       '/health': 'http://localhost:8000',
       '/ws': { target: 'ws://localhost:8000', ws: true },
       // `/leaderboard` is also a client-side route, so only proxy the XHR/fetch calls

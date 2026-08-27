@@ -15,7 +15,7 @@ from app.config import Settings
 from app.db import Base, get_session, get_session_factory
 from app.main import app
 from app.market_data.fake import FakeMarketData
-from app.market_data.kraken import PairStatus, Ticker
+from app.market_data.kraken import Candle, PairStatus, Ticker
 from app.redis_client import get_redis
 
 TEST_DATABASE_URL = "postgresql+asyncpg://kryptos:kryptos@localhost:5432/kryptos_test"
@@ -124,6 +124,12 @@ def fake_market_data(monkeypatch: pytest.MonkeyPatch) -> FakeMarketData:
     async def fake_get_pair_status(pair: str, **_: object) -> PairStatus:
         return await fake.get_pair_status(pair)
 
+    async def fake_get_ohlc(
+        pair: str, interval: int, **_: object
+    ) -> list[Candle]:
+        return await fake.get_ohlc(pair, interval)
+
     monkeypatch.setattr("app.market_data.cache.get_ticker", fake_get_ticker)
     monkeypatch.setattr("app.trading.get_pair_status", fake_get_pair_status)
+    monkeypatch.setattr("app.market_data.candles.get_ohlc", fake_get_ohlc)
     return fake

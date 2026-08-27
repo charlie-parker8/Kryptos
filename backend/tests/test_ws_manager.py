@@ -12,7 +12,11 @@ from decimal import Decimal
 import pytest
 
 from app.ws_manager import ConnectionManager
-from app.ws_messages import PortfolioUpdateMessage, PriceTickMessage
+from app.ws_messages import (
+    CandleUpdateMessage,
+    PortfolioUpdateMessage,
+    PriceTickMessage,
+)
 
 
 class _RecordingWebSocket:
@@ -41,6 +45,21 @@ def _portfolio_update() -> PortfolioUpdateMessage:
     return PortfolioUpdateMessage(
         cash_balance=Decimal(100), holdings=[], net_worth=Decimal(100),
         as_of=datetime.now(UTC),
+    )
+
+
+def _candle_update(pair: str = "BTC/USD") -> CandleUpdateMessage:
+    return CandleUpdateMessage(
+        pair=pair,
+        interval=1,
+        open_time=1_714_564_800,
+        open=Decimal(100),
+        high=Decimal(101),
+        low=Decimal(99),
+        close=Decimal("100.5"),
+        volume=Decimal(1),
+        closed=False,
+        broadcast_at=123,
     )
 
 
@@ -80,6 +99,20 @@ async def test_broadcast_price_tick_reaches_every_connected_user() -> None:
 
     assert ws_a.sent[0]["type"] == "price_tick"
     assert ws_b.sent[0]["type"] == "price_tick"
+
+
+@pytest.mark.asyncio
+async def test_broadcast_candle_update_reaches_every_connected_user() -> None:
+    manager = ConnectionManager()
+    user_a, user_b = uuid.uuid4(), uuid.uuid4()
+    ws_a, ws_b = _RecordingWebSocket(), _RecordingWebSocket()
+    manager.connect(user_a, ws_a)
+    manager.connect(user_b, ws_b)
+
+    await manager.broadcast_candle_update(_candle_update())
+
+    assert ws_a.sent[0]["type"] == "candle_update"
+    assert ws_b.sent[0]["type"] == "candle_update"
 
 
 @pytest.mark.asyncio

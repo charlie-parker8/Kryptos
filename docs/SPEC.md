@@ -43,7 +43,10 @@ Non-negotiable — changes to these definitions require your explicit approval b
 - Multi-currency accounts
 - KYC/AML or other regulatory compliance
 - Native/mobile clients
-- Historical charting or backtesting beyond current-price display
+- Backtesting, trading-strategy simulation, or trade-history analytics. (A read-only OHLC
+  candlestick chart on the Trade page is in scope: recent history from a Redis-cached
+  `GET /candles`, live bars from the Kraken WS `ohlc` feed fanned out over `/ws`, purely
+  for display. It never gates, prices, or blocks an order, and Postgres stores no market data.)
 - Multi-instance scaling, multi-region, or HA concerns
 
 ## Coding & testing expectations

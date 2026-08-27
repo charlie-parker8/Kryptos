@@ -46,6 +46,18 @@ class Settings(BaseSettings):
         default_factory=lambda: ["BTC/USD", "ETH/USD", "SOL/USD"]
     )
 
+    # Candlestick chart (Trade page). Kraken interval minutes; the frontend mirrors this
+    # list in core/realtime/types.ts. History is a Redis read-through cache in front of
+    # Kraken's REST OHLC endpoint (never Postgres — invariant 8); the forming candle is
+    # kept fresh from the WS v2 ohlc feed.
+    supported_candle_intervals: list[int] = Field(
+        default_factory=lambda: [1, 5, 15, 60]
+    )
+    candle_history_limit: int = 500  # bars kept per (pair, interval), and the REST ceiling
+    candle_history_ttl_seconds: int = 180  # closed bars barely move; live feed covers recency
+    candle_forming_ttl_seconds: int = 900  # outlives a brief stream drop mid-bucket
+    kraken_ohlc_snapshot: bool = False  # REST owns history; the first WS update seeds the bar
+
     @property
     def allowed_origins(self) -> list[str]:
         """The exact browser origins allowed to call the API / open the WebSocket. One
