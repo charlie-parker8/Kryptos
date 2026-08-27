@@ -6,6 +6,8 @@
  * All prices/levels here are illustrative, not real market data.
  */
 
+import { mockCandleUpdate } from "./mockCandles";
+import { gaussian, mulberry32 } from "./mockRng";
 import type {
   Asset,
   Pair,
@@ -14,7 +16,7 @@ import type {
   RealtimeMessage,
   RealtimeSource,
 } from "./types";
-import { PAIRS } from "./types";
+import { CANDLE_INTERVALS, PAIRS } from "./types";
 
 export const STARTING_CASH = "100000.00";
 
@@ -51,23 +53,6 @@ interface MockOptions {
   frozen?: boolean;
   /** Base interval between ticks, ms (jittered ±40%). Ignored when frozen. */
   intervalMs?: number;
-}
-
-function mulberry32(seed: number): () => number {
-  let a = seed;
-  return () => {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function gaussian(rng: () => number): number {
-  const u = 1 - rng();
-  const v = rng();
-  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
 }
 
 const ASSET_OF: Record<Pair, Asset> = {
@@ -151,15 +136,27 @@ export function createMockSource(options: MockOptions = {}): RealtimeSource {
         last[pair] = last[pair] * (1 + drift);
       };
 
+      // A forming candle per (pair, interval) — the mock chart's history comes from
+      // `mockCandleHistory` (no backend), this keeps its current bar moving.
+      const emitCandles = (pair: Pair): void => {
+        for (const interval of CANDLE_INTERVALS) {
+          onMessage(mockCandleUpdate(pair, interval, last[pair]));
+        }
+      };
+
       // Initial snapshot + one tick per pair, immediately — matches a real client getting
       // the last portfolio_update on connect and the cached prices right after.
       onMessage(buildPortfolio());
-      for (const pair of PAIRS) onMessage(emitTick(pair));
+      for (const pair of PAIRS) {
+        onMessage(emitTick(pair));
+        emitCandles(pair);
+      }
 
       if (frozen) {
         for (const pair of PAIRS) {
           step(pair);
           onMessage(emitTick(pair));
+          emitCandles(pair);
         }
         onMessage(buildPortfolio());
         return () => {};
@@ -181,6 +178,7 @@ export function createMockSource(options: MockOptions = {}): RealtimeSource {
 
         step(pair);
         onMessage(emitTick(pair));
+        emitCandles(pair);
         if (MOCK_HOLDINGS.some((h) => ASSET_OF[pair] === h.symbol)) {
           onMessage(buildPortfolio());
         }

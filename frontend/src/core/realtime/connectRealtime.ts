@@ -5,6 +5,7 @@
  */
 
 import { setBankruptcyEvent } from "@/core/state/bankruptcyStore";
+import { ingestCandle } from "@/core/state/candleStore";
 import { applyPortfolioUpdate } from "@/core/state/portfolioStore";
 import { ingestTick } from "@/core/state/marketStore";
 
@@ -17,6 +18,8 @@ export function connectRealtime(source: RealtimeSource): () => void {
   const unsubscribe = source.subscribe((message) => {
     if (message.type === "price_tick") {
       ingestTick(message);
+    } else if (message.type === "candle_update") {
+      ingestCandle(message);
     } else if (message.type === "bankruptcy_reset") {
       setBankruptcyEvent(message);
     } else {

@@ -4,6 +4,7 @@ from decimal import Decimal
 import pytest
 
 from app.market_data.fake import FakeMarketData
+from app.market_data.kraken import Candle
 
 
 @pytest.mark.asyncio
@@ -58,6 +59,27 @@ async def test_set_status_can_mark_a_pair_not_tradable() -> None:
 
     assert status.tradable is False
     assert status.status == "cancel_only"
+
+
+@pytest.mark.asyncio
+async def test_get_ohlc_returns_seeded_candles_and_empty_by_default() -> None:
+    fake = FakeMarketData()
+    assert await fake.get_ohlc("BTC/USD", 1) == []
+
+    candle = Candle(
+        pair="BTC/USD",
+        interval=5,
+        open_time=datetime(2024, 1, 1, tzinfo=UTC),
+        open=Decimal(100),
+        high=Decimal(101),
+        low=Decimal(99),
+        close=Decimal(100),
+        volume=Decimal(1),
+    )
+    fake.set_candles("BTC/USD", 5, [candle])
+
+    assert await fake.get_ohlc("BTC/USD", 5) == [candle]
+    assert await fake.get_ohlc("BTC/USD", 1) == []  # other intervals untouched
 
 
 @pytest.mark.asyncio

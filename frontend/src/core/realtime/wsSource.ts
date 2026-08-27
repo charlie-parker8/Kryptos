@@ -30,6 +30,7 @@ const MESSAGE_TYPES = new Set([
   "price_tick",
   "portfolio_update",
   "bankruptcy_reset",
+  "candle_update",
 ]);
 
 function isRealtimeMessage(value: unknown): value is RealtimeMessage {

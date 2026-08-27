@@ -13,12 +13,14 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+from app.candle_stream import run_candle_stream
 from app.config import get_settings
 from app.db import AsyncSessionLocal
 from app.leaderboard import run_leaderboard_refresh
 from app.price_stream import run_price_stream
 from app.redis_client import redis_client
 from app.routers.auth import router as auth_router
+from app.routers.candles import router as candles_router
 from app.routers.leaderboard import router as leaderboard_router
 from app.routers.orders import router as orders_router
 from app.routers.portfolio import router as portfolio_router
@@ -33,6 +35,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     tasks = [
         asyncio.create_task(run_price_stream(settings, redis_client)),
         asyncio.create_task(run_leaderboard_refresh(settings, redis_client)),
+        asyncio.create_task(run_candle_stream(settings, redis_client)),
     ]
     try:
         yield
@@ -94,6 +97,7 @@ app.include_router(orders_router)
 app.include_router(portfolio_router)
 app.include_router(ws_router)
 app.include_router(leaderboard_router)
+app.include_router(candles_router)
 
 
 class HealthChecks(BaseModel):

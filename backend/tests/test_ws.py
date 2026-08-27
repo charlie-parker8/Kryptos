@@ -8,6 +8,7 @@ serialization — only the transport is faked.
 
 import asyncio
 import uuid
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -15,8 +16,10 @@ import redis.asyncio as redis
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app import candle_stream
 from app.deps import SESSION_COOKIE_NAME
 from app.market_data.fake import FakeMarketData
+from app.market_data.kraken import Candle
 from app.price_stream import handle_tick
 from app.routers.ws import portfolio_ws
 
@@ -197,3 +200,45 @@ async def test_ws_receives_a_simulated_price_tick_with_broadcast_at(
     assert tick_message["pair"] == "BTC/USD"
     assert isinstance(tick_message["broadcast_at"], int)
     assert tick_message["broadcast_at"] > 0
+
+
+@pytest.mark.asyncio
+async def test_ws_receives_a_candle_update_frame(
+    client: AsyncClient,
+    fake_market_data: FakeMarketData,
+    redis_client: redis.Redis,
+    session_factory: async_sessionmaker[AsyncSession],
+    test_settings: object,
+) -> None:
+    candle_stream.reset_forming_throttle()
+    await _register(client)
+    fake_ws = FakeWebSocket(cookies={SESSION_COOKIE_NAME: _session_cookie(client)})
+
+    task = asyncio.create_task(
+        portfolio_ws(fake_ws, session_factory=session_factory, redis_client=redis_client)
+    )
+    await fake_ws.ready.wait()
+
+    candle = Candle(
+        pair="BTC/USD",
+        interval=1,
+        open_time=datetime(2024, 5, 1, 12, 0, tzinfo=UTC),
+        open=Decimal(100),
+        high=Decimal(101),
+        low=Decimal(99),
+        close=Decimal("100.5"),
+        volume=Decimal(1),
+    )
+    await candle_stream.handle_candle(candle, test_settings, redis_client)
+
+    fake_ws.simulate_disconnect()
+    await task
+
+    assert len(fake_ws.sent) == 2
+    candle_message = fake_ws.sent[1]
+    assert candle_message["type"] == "candle_update"
+    assert candle_message["pair"] == "BTC/USD"
+    assert candle_message["interval"] == 1
+    assert candle_message["closed"] is False
+    assert candle_message["open_time"] == int(candle.open_time.timestamp())
+    assert isinstance(candle_message["broadcast_at"], int)

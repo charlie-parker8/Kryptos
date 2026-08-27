@@ -41,3 +41,58 @@ settles to ~1 refetch per pair per TTL. Reduction has held between 92% and 98% a
 
 _Pending: needs k6 (`k6 run backend/benchmarks/k6/leaderboard_latency.js` against the
 running app). Script committed; no run recorded in this environment yet._
+
+### 2026-08-27 — 0ac11ab
+- N concurrent orders: 200
+- Elapsed: 2.379s
+- Throughput: 84.1 orders/sec
+- Invariant violations: 0 (cash_balance and holdings asserted non-negative after the batch)
+
+### 2026-08-27 — 0ac11ab
+- N concurrent orders: 200
+- Elapsed: 2.728s
+- Throughput: 73.3 orders/sec
+- Invariant violations: 0 (cash_balance and holdings asserted non-negative after the batch)
+
+### 2026-08-27 — 0ac11ab
+- N concurrent orders: 200
+- Elapsed: 2.096s
+- Throughput: 95.4 orders/sec
+- Invariant violations: 0 (cash_balance and holdings asserted non-negative after the batch)
+
+### 2026-08-27 — 0ac11ab
+- N concurrent orders: 200
+- Elapsed: 1.884s
+- Throughput: 106.2 orders/sec
+- Invariant violations: 0 (cash_balance and holdings asserted non-negative after the batch)
+
+### `candle_cache_effectiveness.py` — Kraken OHLC calls saved by the candle history cache
+
+Same read-through model as the price cache: a cold `:history` key is fetched once per
+(pair, interval), then served from Redis until its (short) TTL. The live WS stream keeps
+only `:forming` warm and makes no REST calls.
+
+### 2026-08-27 — 0ac11ab
+- Workload: 30 viewers over 12 (pair, interval) charts, 1 read/3s for 30s (history TTL 180s)
+- Kraken OHLC calls without cache: 300
+- Kraken OHLC calls with cache: 29
+- Reduction: 90.3%
+- Forming-candle WS broadcasts are coalesced to <=1/s per (pair, interval); the `:forming` Redis write on every trade is not rate-limited.
+
+### 2026-08-27 — 0ac11ab
+- N concurrent orders: 200
+- Elapsed: 1.975s
+- Throughput: 101.2 orders/sec
+- Invariant violations: 0 (cash_balance and holdings asserted non-negative after the batch)
+
+### 2026-08-27 — 0ac11ab
+- N concurrent orders: 200
+- Elapsed: 1.907s
+- Throughput: 104.9 orders/sec
+- Invariant violations: 0 (cash_balance and holdings asserted non-negative after the batch)
+
+### 2026-08-27 — 956550b
+- N concurrent orders: 200
+- Elapsed: 1.972s
+- Throughput: 101.4 orders/sec
+- Invariant violations: 0 (cash_balance and holdings asserted non-negative after the batch)

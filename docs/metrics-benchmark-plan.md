@@ -101,6 +101,10 @@ accounts), and the measured numbers. This is the traceability record behind bull
 - `backend/benchmarks/scripts/cache_effectiveness.py`: runs a fixed simulated read
   workload against the Kraken adapter with caching disabled vs. enabled, counting outbound
   Kraken calls in each case, to derive the % reduction.
+- `backend/benchmarks/scripts/candle_cache_effectiveness.py`: the same model for the
+  Trade-page chart's `GET /candles` history cache — many open charts polling one
+  pair+interval each, cached vs. uncached Kraken OHLC calls. The live `ohlc` WS stream only
+  keeps `:forming` warm and makes no REST calls.
 - `backend/benchmarks/k6/leaderboard_latency.js`: seeds N synthetic accounts into the
   Redis sorted set, then issues concurrent leaderboard-read requests, reporting p95/p99
   read latency. Uses a sustained-duration k6 scenario (`constant-vus` held for a fixed

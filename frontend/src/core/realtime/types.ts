@@ -12,6 +12,13 @@ export type Pair = (typeof PAIRS)[number];
 /** Base asset as it appears in holdings/ledger rows, e.g. "BTC" (not the pair). */
 export type Asset = "BTC" | "ETH" | "SOL";
 
+/**
+ * Candlestick timeframes, in minutes — mirrors the backend `supported_candle_intervals`
+ * (`backend/app/config.py`). Kept in sync by hand, like the message shapes below.
+ */
+export const CANDLE_INTERVALS = [1, 5, 15, 60] as const;
+export type CandleInterval = (typeof CANDLE_INTERVALS)[number];
+
 export interface PriceTick {
   type: "price_tick";
   pair: Pair;
@@ -64,7 +71,55 @@ export interface BankruptcyReset {
   reset_at: string;
 }
 
-export type RealtimeMessage = PriceTick | PortfolioUpdate | BankruptcyReset;
+/**
+ * One OHLC bar. Mirrors `CandlePoint` from `GET /candles` (backend
+ * `app/routers/candles.py`). Prices are decimal **strings** — never float them for
+ * arithmetic; the chart only ever `Number()`s them for pixel positions.
+ */
+export interface Candle {
+  /** unix epoch **seconds** — the bucket's open time (lightweight-charts `time`). */
+  open_time: number;
+  open: string;
+  high: string;
+  low: string;
+  close: string;
+  volume: string;
+}
+
+/** `GET /candles?pair=&interval=` response. `candles` ascending by `open_time`; the last
+ * entry may still be forming. */
+export interface CandlesResponse {
+  pair: Pair;
+  interval: CandleInterval;
+  candles: Candle[];
+}
+
+/**
+ * Live bar pushed over `/ws` for whichever (pair, interval) chart is open — broadcast to
+ * every client (like `price_tick`), filtered client-side. Mirrors `CandleUpdateMessage`
+ * (backend `app/ws_messages.py`). `closed` is true on the frame that finalises a bucket.
+ */
+export interface CandleUpdate {
+  type: "candle_update";
+  pair: Pair;
+  interval: CandleInterval;
+  /** unix epoch seconds — the bucket's open time. */
+  open_time: number;
+  open: string;
+  high: string;
+  low: string;
+  close: string;
+  volume: string;
+  closed: boolean;
+  /** unix epoch milliseconds. */
+  broadcast_at: number;
+}
+
+export type RealtimeMessage =
+  | PriceTick
+  | PortfolioUpdate
+  | BankruptcyReset
+  | CandleUpdate;
 
 /**
  * The one seam between "where messages come from" and the rest of the app. The mock

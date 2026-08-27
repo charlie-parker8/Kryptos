@@ -10,6 +10,7 @@ import { apiPost } from "@/core/api/client";
 import type { SessionUser } from "@/core/api/types";
 import { disconnectRealtime } from "@/core/realtime/connectRealtime";
 import { resetBankruptcy } from "@/core/state/bankruptcyStore";
+import { resetCandles } from "@/core/state/candleStore";
 import { resetMarket } from "@/core/state/marketStore";
 import { resetPortfolio } from "@/core/state/portfolioStore";
 import { SESSION_KEY } from "./useSession";
@@ -44,6 +45,7 @@ export async function logout(): Promise<void> {
     disconnectRealtime();
     resetPortfolio();
     resetMarket();
+    resetCandles();
     resetBankruptcy();
     // Drop every cached response (portfolio, orders, …) so the next account starts clean.
     await mutate(() => true, undefined, { revalidate: false });
