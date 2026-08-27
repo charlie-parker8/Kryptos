@@ -11,11 +11,13 @@ trading floor / printed ledger; the flap board and the tape stay dark in both mo
 because they are physical objects. Toggle in the top bar; the choice persists
 (`localStorage`, versioned) and otherwise follows the OS setting. IBM Plex Sans + Mono.
 
-Screens: **Auth** (`/login`, `/register`), **Dashboard** (`/`), **Trade** (`/trade`), and a
-**Leaderboard** (`/leaderboard`) placeholder. The app runs on the real backend behind a
-Vite dev proxy — cookie auth, `GET /portfolio` for first paint, `POST/GET /orders`, and the
-`/ws` stream for live prices + portfolio revaluation. Add `?mock` to run on the
-deterministic mock feed with the auth gate bypassed (no backend needed).
+Screens: **Auth** (`/login`, `/register` — the latter takes a unique username, the
+leaderboard's display name), **Dashboard** (`/`), **Trade** (`/trade`), and **Leaderboard**
+(`/leaderboard`). The app runs on the real backend behind a Vite dev proxy — cookie auth,
+`GET /portfolio` for first paint, `POST/GET /orders`, `GET /leaderboard` (polled), and the
+`/ws` stream for live prices + portfolio revaluation + the `bankruptcy_reset` moment. Add
+`?mock` to run on the deterministic mock feed with the auth gate bypassed (no backend
+needed); `?bankrupt` previews the bankruptcy-reset modal.
 
 ## Run
 
@@ -47,15 +49,15 @@ src/
     auth/               useSession (SWR on /auth/me), login/register/logout
     realtime/           RealtimeSource seam, wire types, wsSource (/ws), mock feed, mode flags
     state/              zustand stores (rAF-coalesced) + narrow selector hooks
-    hooks/              usePortfolio (seed), useOrders (blotter)
+    hooks/              usePortfolio (seed), useOrders (blotter), useLeaderboard (polled)
     lib/                money / format / staleness / direction helpers
-    primitives/         AnimatedNumber, Marquee, StaleBadge, LiveDot, Delta, DirGlyph, ComingSoon
+    primitives/         AnimatedNumber, Marquee, StaleBadge, LiveDot, Delta, DirGlyph, Modal
     useDashboardData.ts
   auth/                AuthLayout, LoginScreen, RegisterScreen, AuthField
-  dashboard/           AppShell, Dashboard, MarketLadder, Positions, TapeTicker,
-                       AccountSummary, AccountMenu, SplitFlapNumber, ThemeToggle
+  dashboard/           AppShell, Dashboard, MarketLadder, Positions, TapeTicker, AccountSummary,
+                       AccountMenu, SplitFlapNumber, ThemeToggle, BankruptcyModal
   trade/               TradeScreen, OrderTicket, OrderBlotter
-  leaderboard/         LeaderboardScreen (+ placeholderData — no backend endpoint yet)
+  leaderboard/         LeaderboardScreen (+ placeholderData for ?mock)
   styles/
     index.css           Tailwind @theme mapping + base + browser-surface + reduced-motion
     theme.css           the --k-* palette (light + dark) + component styles (flap, tape, ledger)
@@ -67,7 +69,8 @@ src/
 the same `RealtimeSource` interface as the mock, so `RealtimeConnector` picks one and
 `connectRealtime` feeds the zustand stores unchanged. REST goes through `core/api/client.ts`
 (same-origin — the httponly `kryptos_session` cookie rides along); SWR caches `/auth/me`,
-`/portfolio` (first paint), and `/orders` (blotter). `POST /orders` returns **201 even on
-rejection** — the ticket branches on `status` in the body; a `503` is retried with the same
-`Idempotency-Key`. The Redis leaderboard and bankruptcy reset have no endpoints yet and are
-shown as "coming soon".
+`/portfolio` (first paint), `/orders` (blotter), and `/leaderboard` (polled every 5s).
+`POST /orders` returns **201 even on rejection** — the ticket branches on `status` in the
+body; a `503` is retried with the same `Idempotency-Key`. A `bankruptcy_reset` WS message
+(net worth hit $0, account reset) raises a modal from `BankruptcyModal`; a restored
+`portfolio_update` follows it.

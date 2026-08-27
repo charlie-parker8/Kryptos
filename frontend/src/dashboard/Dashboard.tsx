@@ -1,18 +1,19 @@
 import { Link } from "react-router";
 
+import { useLeaderboard } from "@/core/hooks/useLeaderboard";
 import { formatClock } from "@/core/lib/format";
 import { formatUsd } from "@/core/lib/money";
-import { ComingSoon } from "@/core/primitives/ComingSoon";
 import { Delta } from "@/core/primitives/Delta";
 import { PAIRS } from "@/core/realtime/types";
 import { useDashboardData } from "@/core/useDashboardData";
-import { MOCK_STANDINGS } from "@/leaderboard/placeholderData";
 import { Positions } from "./Positions";
 import { SplitFlapNumber } from "./SplitFlapNumber";
 
 export function Dashboard() {
   const { netWorth, pnlVsStart, startingCash, asOf } = useDashboardData();
+  const { standings } = useLeaderboard();
   const startingCashLabel = startingCash ? formatUsd(startingCash) : "—";
+  const topStandings = standings?.slice(0, 4) ?? [];
 
   return (
     <div className="mx-auto max-w-5xl space-y-8">
@@ -60,34 +61,32 @@ export function Dashboard() {
           to="/leaderboard"
           className="border border-border p-4 transition-colors hover:border-accent"
         >
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-medium uppercase tracking-wide text-fg-strong">
-              Leaderboard
-            </h3>
-            <ComingSoon />
-          </div>
-          <ol className="mt-3 space-y-1.5 font-mono text-xs">
-            {MOCK_STANDINGS.slice(0, 4).map((row) => (
-              <li
-                key={row.rank}
-                className={`flex justify-between ${row.isYou ? "text-accent" : "text-muted"}`}
-              >
-                <span>
-                  {row.rank}. {row.handle}
-                </span>
-                <span>{formatUsd(row.netWorth)}</span>
-              </li>
-            ))}
-          </ol>
+          <h3 className="text-xs font-medium uppercase tracking-wide text-fg-strong">
+            Leaderboard
+          </h3>
+          {topStandings.length > 0 ? (
+            <ol className="mt-3 space-y-1.5 font-mono text-xs">
+              {topStandings.map((row) => (
+                <li
+                  key={row.rank}
+                  className={`flex justify-between ${row.is_you ? "text-accent" : "text-muted"}`}
+                >
+                  <span>
+                    {row.rank}. {row.username}
+                  </span>
+                  <span>{formatUsd(row.net_worth)}</span>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="mt-3 text-xs text-muted">Standings load in a moment…</p>
+          )}
         </Link>
 
         <article className="border border-border p-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-medium uppercase tracking-wide text-fg-strong">
-              Reset rule
-            </h3>
-            <ComingSoon />
-          </div>
+          <h3 className="text-xs font-medium uppercase tracking-wide text-fg-strong">
+            Reset rule
+          </h3>
           <p className="mt-3 text-xs leading-relaxed text-muted">
             If net worth reaches $0, the account resets to {startingCashLabel} and
             holdings clear. Order and ledger history is kept.

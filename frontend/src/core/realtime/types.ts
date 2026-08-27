@@ -49,7 +49,22 @@ export interface PortfolioUpdate extends PortfolioSnapshot {
   type: "portfolio_update";
 }
 
-export type RealtimeMessage = PriceTick | PortfolioUpdate;
+/**
+ * Sent once to a user's own connections when their net worth hit $0 and the account was
+ * reset (backend `app/bankruptcy.py`). A `portfolio_update` with the restored balances
+ * follows immediately after.
+ */
+export interface BankruptcyReset {
+  type: "bankruptcy_reset";
+  /** the balance the account was restored to, decimal string */
+  starting_cash_balance: string;
+  /** base assets whose positions were cleared, e.g. ["BTC", "ETH"] */
+  cleared_symbols: string[];
+  /** ISO 8601, UTC */
+  reset_at: string;
+}
+
+export type RealtimeMessage = PriceTick | PortfolioUpdate | BankruptcyReset;
 
 /**
  * The one seam between "where messages come from" and the rest of the app. The mock

@@ -1,25 +1,18 @@
 /**
- * Illustrative standings for the leaderboard placeholder. There is no `GET /leaderboard`
- * endpoint yet (the Redis-backed leaderboard is a later backend phase); until it ships the
- * screen shows these clearly-labelled fake figures so the layout is real and reviewable.
+ * Illustrative standings for `?mock` mode, where there's no backend to serve
+ * `GET /leaderboard`. Shape matches the real `LeaderboardEntry` DTO so the screen renders
+ * one code path either way.
  */
 
-export interface Standing {
-  rank: number;
-  handle: string;
-  netWorth: string;
-  /** rank change since the last snapshot: + up, - down, 0 unchanged */
-  move: number;
-  isYou?: boolean;
-}
+import type { LeaderboardEntry } from "@/core/api/types";
 
-export const MOCK_STANDINGS: Standing[] = [
-  { rank: 1, handle: "ada.eth", netWorth: "121908.44", move: 1 },
-  { rank: 2, handle: "satoshi_jr", netWorth: "112442.10", move: 0 },
-  { rank: 3, handle: "you", netWorth: "103465.00", move: 2, isYou: true },
-  { rank: 4, handle: "paperhands", netWorth: "98001.73", move: -2 },
-  { rank: 5, handle: "hodlr_9000", netWorth: "94455.20", move: -1 },
-  { rank: 6, handle: "diamondhandz", netWorth: "91220.05", move: 0 },
-  { rank: 7, handle: "buyhigh_selllow", netWorth: "88740.90", move: -3 },
-  { rank: 8, handle: "moonboy42", netWorth: "85510.00", move: 1 },
+export const MOCK_STANDINGS: LeaderboardEntry[] = [
+  { rank: 1, username: "ada.eth", net_worth: "121908.44", move: 1, is_you: false },
+  { rank: 2, username: "satoshi_jr", net_worth: "112442.10", move: 0, is_you: false },
+  { rank: 3, username: "you", net_worth: "103465.00", move: 2, is_you: true },
+  { rank: 4, username: "paperhands", net_worth: "98001.73", move: -2, is_you: false },
+  { rank: 5, username: "hodlr_9000", net_worth: "94455.20", move: -1, is_you: false },
+  { rank: 6, username: "diamondhandz", net_worth: "91220.05", move: 0, is_you: false },
+  { rank: 7, username: "buyhigh_selllow", net_worth: "88740.90", move: -3, is_you: false },
+  { rank: 8, username: "moonboy42", net_worth: "85510.00", move: 1, is_you: false },
 ];

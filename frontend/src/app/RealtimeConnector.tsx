@@ -14,14 +14,27 @@ import { useEffect } from "react";
 import { usePortfolioSeed } from "@/core/hooks/usePortfolio";
 import { connectRealtime } from "@/core/realtime/connectRealtime";
 import { createMockSource } from "@/core/realtime/mockSource";
-import { IS_FROZEN, IS_MOCK_MODE } from "@/core/realtime/mode";
+import {
+  IS_BANKRUPT_PREVIEW,
+  IS_FROZEN,
+  IS_MOCK_MODE,
+} from "@/core/realtime/mode";
 import { createWebSocketSource } from "@/core/realtime/wsSource";
+import { setBankruptcyEvent } from "@/core/state/bankruptcyStore";
 import { setConnectionStatus } from "@/core/state/connectionStore";
 
 export function RealtimeConnector() {
   usePortfolioSeed(!IS_MOCK_MODE);
 
   useEffect(() => {
+    if (IS_BANKRUPT_PREVIEW) {
+      setBankruptcyEvent({
+        type: "bankruptcy_reset",
+        starting_cash_balance: "100000.00",
+        cleared_symbols: ["BTC", "ETH"],
+        reset_at: new Date().toISOString(),
+      });
+    }
     if (IS_MOCK_MODE) {
       setConnectionStatus("open");
       connectRealtime(createMockSource({ frozen: IS_FROZEN }));
