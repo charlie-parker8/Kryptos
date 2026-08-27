@@ -9,7 +9,7 @@
  * both safe at these magnitudes (≤ ~$1e7, ≤ 2dp — exact in a double).
  */
 
-const DECIMAL_RE = /^-?\d+(\.\d+)?$/;
+export const DECIMAL_RE = /^-?\d+(\.\d+)?$/;
 
 /** Scale a decimal string to an integer number of 10^-`dp` units. Throws on malformed input. */
 export function toMinor(value: string, dp: number): bigint {
@@ -92,6 +92,24 @@ export function pctChange(from: string, to: string): number {
   const base = Number(from);
   if (base === 0) return 0;
   return ((Number(to) - base) / base) * 100;
+}
+
+/**
+ * Cosmetic order-ticket estimate: `price * quantity`, exact via the scaled-integer path
+ * (house rule: no float money math even when non-authoritative). The server recomputes the
+ * real fill cost against the live bid/ask at execution time — this is only a preview.
+ * Returns a 2dp decimal string, or `null` if either input isn't a valid decimal.
+ */
+export function estimateNotional(
+  price: string,
+  quantity: string,
+): string | null {
+  try {
+    const scaled = toMinor(price, 2) * toMinor(quantity, 10); // scale 10^-12
+    return fromMinor(scaled / 10n ** 10n, 2); // truncate to cents
+  } catch {
+    return null;
+  }
 }
 
 export interface Pnl {

@@ -1,11 +1,14 @@
 /**
- * The handful of derived values every skin's Dashboard needs, in one place. Each skin
- * still lays them out its own way — this just keeps the "how am I doing vs the $100,000
- * start" math from being written three times.
+ * The handful of derived values the Dashboard needs, in one place — chiefly the "how am I
+ * doing vs the cash I started with" math. Starting cash is per-account (`GET /auth/me`),
+ * not a constant; in `?mock` mode there's no session, so it falls back to the mock feed's
+ * seed value.
  */
 
-import { STARTING_CASH } from "@/core/realtime/mockSource";
+import { useSession } from "@/core/auth/useSession";
 import type { Pnl } from "@/core/lib/money";
+import { IS_MOCK_MODE } from "@/core/realtime/mode";
+import { STARTING_CASH } from "@/core/realtime/mockSource";
 import {
   useCash,
   useIsConnected,
@@ -16,7 +19,7 @@ import {
 export interface DashboardData {
   netWorth: string | undefined;
   cash: string | undefined;
-  startingCash: string;
+  startingCash: string | undefined;
   /** net worth minus the starting balance — the number the whole screen is really about */
   pnlVsStart: Pnl | null;
   connected: boolean;
@@ -28,20 +31,25 @@ export function useDashboardData(): DashboardData {
   const cash = useCash();
   const asOf = usePortfolioAsOf();
   const connected = useIsConnected();
+  const { user } = useSession();
 
-  const start = Number(STARTING_CASH);
+  const startingCash =
+    user?.starting_cash_balance ?? (IS_MOCK_MODE ? STARTING_CASH : undefined);
+
   const pnlVsStart =
-    netWorth === undefined
+    netWorth === undefined || startingCash === undefined
       ? null
       : {
-          abs: Number(netWorth) - start,
-          pct: ((Number(netWorth) - start) / start) * 100,
+          abs: Number(netWorth) - Number(startingCash),
+          pct:
+            ((Number(netWorth) - Number(startingCash)) / Number(startingCash)) *
+            100,
         };
 
   return {
     netWorth,
     cash,
-    startingCash: STARTING_CASH,
+    startingCash,
     pnlVsStart,
     connected,
     asOf,

@@ -7,9 +7,8 @@ import { useWallClock } from "@/core/hooks/useWallClock";
 import { AnimatedNumber } from "@/core/primitives/AnimatedNumber";
 import { Delta } from "@/core/primitives/Delta";
 import { StaleBadge } from "@/core/primitives/StaleBadge";
-import { REFERENCE_PRICE } from "@/core/realtime/mockSource";
 import { PAIRS, type Pair } from "@/core/realtime/types";
-import { useTick } from "@/core/state/selectors";
+import { useSessionAnchor, useTick } from "@/core/state/selectors";
 
 export function MarketLadder() {
   return (
@@ -28,10 +27,11 @@ export function MarketLadder() {
 
 const LadderRow = memo(function LadderRow({ pair }: { pair: Pair }) {
   const tick = useTick(pair);
+  const anchor = useSessionAnchor(pair);
   const now = useWallClock(1000);
   const asset = ASSET_OF[pair];
   const stale = tick ? isStale(tick.as_of, now) : false;
-  const change = tick ? pctChange(REFERENCE_PRICE[pair], tick.last) : 0;
+  const change = tick && anchor ? pctChange(anchor, tick.last) : 0;
 
   return (
     <div className="ladder-row min-w-[13rem] shrink-0 border-r border-border px-3 py-2.5 lg:min-w-0 lg:border-r-0">
@@ -53,7 +53,11 @@ const LadderRow = memo(function LadderRow({ pair }: { pair: Pair }) {
         ) : (
           <span className="font-mono text-xl text-muted">—</span>
         )}
-        {tick ? <Delta pct={change} glyphSize={8} className="text-xs" /> : null}
+        {tick && anchor ? (
+          <span title="Change since you opened Kryptos">
+            <Delta pct={change} glyphSize={8} className="text-xs" />
+          </span>
+        ) : null}
       </div>
       <div className="mt-1 flex items-center justify-between text-[0.6875rem] text-muted">
         <span className="font-mono">

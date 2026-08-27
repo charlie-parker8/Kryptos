@@ -40,3 +40,9 @@ export function applyPortfolioUpdate(update: PortfolioUpdate): void {
 export function flushPortfolioNow(): void {
   flush();
 }
+
+/** Drop the snapshot — called on logout so the next session never flashes stale numbers. */
+export function resetPortfolio(): void {
+  pendingSnapshot = null;
+  usePortfolioStore.setState({ snapshot: null });
+}

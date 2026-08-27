@@ -26,3 +26,8 @@ export function connectRealtime(source: RealtimeSource): () => void {
   };
   return teardown;
 }
+
+/** Tear down the active feed, if any — called on logout so a new session starts clean. */
+export function disconnectRealtime(): void {
+  teardown?.();
+}

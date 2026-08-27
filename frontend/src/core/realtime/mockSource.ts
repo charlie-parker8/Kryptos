@@ -40,27 +40,11 @@ const SEED_PRICE: Record<Pair, number> = {
   "SOL/USD": 198.44,
 };
 
-/** Yesterday's close — reference for the 24h % on the price grid (mock-only; no REST feed exists). */
-export const REFERENCE_PRICE: Record<Pair, string> = {
-  "BTC/USD": "94806.00",
-  "ETH/USD": "3548.10",
-  "SOL/USD": "191.20",
-};
-
 const PER_TICK_VOL: Record<Pair, number> = {
   "BTC/USD": 0.0006,
   "ETH/USD": 0.0009,
   "SOL/USD": 0.0016,
 };
-
-/** Standings for the "coming soon" leaderboard card — illustrative. */
-export const MOCK_STANDINGS = [
-  { rank: 1, handle: "ada.eth", netWorth: "121908.44", move: 1 },
-  { rank: 2, handle: "satoshi_jr", netWorth: "112442.10", move: 0 },
-  { rank: 3, handle: "you", netWorth: "103465.00", move: 2, isYou: true },
-  { rank: 4, handle: "paperhands", netWorth: "98001.73", move: -2 },
-  { rank: 5, handle: "hodlr_9000", netWorth: "94455.20", move: -1 },
-] as const;
 
 interface MockOptions {
   /** Emit one deterministic round of ticks + a portfolio update, then stop. For screenshots. */
