@@ -14,6 +14,7 @@ from app.config import get_settings
 from app.db import get_session
 from app.deps import SESSION_COOKIE_NAME, get_current_user
 from app.models import User, UserSession
+from app.rate_limit import rate_limit
 from app.redis_client import get_redis
 from app.security import (
     generate_session_token,
@@ -23,6 +24,11 @@ from app.security import (
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+# Per-IP throttles on the unauthenticated surface. Generous enough for real fat-fingering,
+# tight enough to blunt credential stuffing / signup spam.
+_register_rate_limit = rate_limit("auth_register", limit=5, window_seconds=300)
+_login_rate_limit = rate_limit("auth_login", limit=10, window_seconds=60)
 
 # A precomputed hash so a login attempt against an unregistered email still pays bcrypt's
 # cost, keeping response timing indistinguishable from a wrong-password attempt on a real
@@ -86,7 +92,10 @@ async def _authenticate(db: AsyncSession, email: str, password: str) -> User | N
 
 
 @router.post(
-    "/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED
+    "/register",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(_register_rate_limit)],
 )
 async def register(
     payload: RegisterRequest,
@@ -130,7 +139,11 @@ def _registration_conflict_detail(exc: IntegrityError) -> str:
     return "Email or username already taken"
 
 
-@router.post("/login", response_model=UserResponse)
+@router.post(
+    "/login",
+    response_model=UserResponse,
+    dependencies=[Depends(_login_rate_limit)],
+)
 async def login(
     payload: LoginRequest,
     response: Response,
@@ -160,7 +173,14 @@ async def logout(
             .values(revoked_at=func.now())
         )
         await db.commit()
-    response.delete_cookie(SESSION_COOKIE_NAME, path="/")
+    # Mirror the attributes _issue_session set so the browser matches and clears the cookie.
+    response.delete_cookie(
+        SESSION_COOKIE_NAME,
+        path="/",
+        httponly=True,
+        secure=get_settings().environment == "production",
+        samesite="lax",
+    )
 
 
 @router.get("/me", response_model=UserResponse)

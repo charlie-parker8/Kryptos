@@ -1,0 +1,38 @@
+name: keep-alive
+
+# Pings the API's /health every ~10 min so the free Render instance doesn't spin down and
+# the free Supabase project doesn't pause (the health check runs SELECT 1 + Redis PING).
+#
+# Setup: repo Settings → Secrets and variables → Actions → Variables → New variable
+#   KEEPALIVE_URL = https://api.<your-domain>/health
+#
+# Notes: GitHub runs cron on a best-effort basis (often 5–15 min late under load), and
+# disables scheduled workflows after 60 days with no repo activity — re-enable from the
+# Actions tab if that happens.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: keep-alive
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping ${{ vars.KEEPALIVE_URL }}
+        run: |
+          if [ -z "${{ vars.KEEPALIVE_URL }}" ]; then
+            echo "::error::KEEPALIVE_URL repository variable is not set"; exit 1
+          fi
+          code=$(curl -sS -o /tmp/body -w '%{http_code}' --max-time 30 --retry 2 "${{ vars.KEEPALIVE_URL }}" || echo 000)
+          echo "health -> HTTP $code"; cat /tmp/body || true
+          # Only 200 is healthy. 503 (Postgres unreachable) or 000 (instance down) fail the
+          # run on purpose — the red X / notification doubles as a free uptime alert.
+          test "$code" = "200"
