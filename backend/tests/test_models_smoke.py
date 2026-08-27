@@ -11,6 +11,7 @@ from app.models import Holding, LedgerEntry, Order, User
 def _make_user(**overrides: object) -> User:
     defaults: dict[str, object] = {
         "email": f"{uuid.uuid4()}@example.com",
+        "username": f"u{uuid.uuid4().hex[:12]}",
         "password_hash": "not-a-real-hash",
         "starting_cash_balance": Decimal("100000.00"),
         "cash_balance": Decimal("100000.00"),

@@ -29,6 +29,9 @@ _DUMMY_PASSWORD_HASH = hash_password("not-a-real-password-used-only-for-timing")
 
 class RegisterRequest(BaseModel):
     email: EmailStr
+    username: str = Field(
+        min_length=3, max_length=32, pattern=r"^[A-Za-z0-9._-]+$"
+    )
     password: str = Field(min_length=8, max_length=72)
 
 
@@ -42,6 +45,7 @@ class UserResponse(BaseModel):
 
     id: uuid.UUID
     email: str
+    username: str
     cash_balance: Decimal
     starting_cash_balance: Decimal
     created_at: datetime
@@ -89,6 +93,7 @@ async def register(
     settings = get_settings()
     user = User(
         email=payload.email,
+        username=payload.username,
         password_hash=hash_password(payload.password),
         starting_cash_balance=settings.starting_cash_balance,
         cash_balance=settings.starting_cash_balance,
@@ -96,14 +101,26 @@ async def register(
     db.add(user)
     try:
         await db.flush()
-    except IntegrityError:
+    except IntegrityError as exc:
         await db.rollback()
         raise HTTPException(
-            status.HTTP_409_CONFLICT, "Email already registered"
+            status.HTTP_409_CONFLICT, _registration_conflict_detail(exc)
         ) from None
 
     await _issue_session(db, user, response)
     return user
+
+
+def _registration_conflict_detail(exc: IntegrityError) -> str:
+    """Map a unique-violation on register to a specific message. The email unique index is
+    Postgres-auto-named `users_email_key`; the username one is `uq_users_username`.
+    """
+    text = str(exc.orig)
+    if "uq_users_username" in text:
+        return "Username already taken"
+    if "users_email_key" in text:
+        return "Email already registered"
+    return "Email or username already taken"
 
 
 @router.post("/login", response_model=UserResponse)
