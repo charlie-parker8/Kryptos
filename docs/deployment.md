@@ -122,8 +122,9 @@ The container runs `alembic upgrade head` before `uvicorn` on every boot (see
 3. Environment Variables:
    - `VITE_API_URL` = `https://api.<domain>`
    - `VITE_WS_URL` = `wss://api.<domain>/ws`
-4. Edit `frontend/vercel.json`: in the `Content-Security-Policy` header, replace both
-   `api.CHANGE-ME.example` occurrences with `api.<domain>`. Commit and redeploy.
+4. `frontend/vercel.json`'s `Content-Security-Policy` header pins the API host in
+   `connect-src` (currently `api.playkryptos.com`). If your domain differs, update both the
+   `https://` and `wss://` entries there, commit, and redeploy.
 5. **Settings → Domains → add `app.<domain>`**, put its CNAME target into DNS.
 
 `vercel.json` already handles the SPA deep-link rewrite (`/trade`, `/leaderboard` → `index.html`)
