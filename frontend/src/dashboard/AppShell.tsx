@@ -5,6 +5,7 @@ import { LiveDot } from "@/core/primitives/LiveDot";
 import { useIsConnected } from "@/core/state/selectors";
 import { AccountSummary } from "./AccountSummary";
 import { AccountMenu } from "./AccountMenu";
+import { BankruptcyModal } from "./BankruptcyModal";
 import { MarketLadder } from "./MarketLadder";
 import { TapeTicker } from "./TapeTicker";
 import { ThemeToggle } from "./ThemeToggle";
@@ -20,6 +21,7 @@ export function AppShell() {
   return (
     <div className="flex min-h-dvh flex-col bg-bg font-ui text-fg lg:h-dvh">
       <RealtimeConnector />
+      <BankruptcyModal />
       <header className="flex h-12 shrink-0 items-center justify-between border-b border-border px-4">
         <div className="flex items-center gap-6">
           <span className="font-mono text-sm font-semibold tracking-tight text-fg-strong">

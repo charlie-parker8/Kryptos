@@ -11,3 +11,5 @@ const params =
 
 export const IS_FROZEN = params.has("frozen");
 export const IS_MOCK_MODE = IS_FROZEN || params.has("mock");
+/** `?bankrupt` fires one fake `bankruptcy_reset` on load so the modal can be previewed. */
+export const IS_BANKRUPT_PREVIEW = params.has("bankrupt");

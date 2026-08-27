@@ -6,12 +6,16 @@ import { register } from "@/core/auth/api";
 import { useSession } from "@/core/auth/useSession";
 import { AuthField } from "./AuthField";
 
+const USERNAME_RE = /^[A-Za-z0-9._-]+$/;
+
 function messageFor(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 409)
-      return "That email is already registered — sign in instead.";
+      return error.detail === "Username already taken"
+        ? "That username is taken — pick another."
+        : "That email is already registered — sign in instead.";
     if (error.status === 422)
-      return "Enter a valid email and a password of at least 8 characters.";
+      return "Check your email, a username of 3–32 letters/numbers, and a password of at least 8 characters.";
     if (error.status >= 500)
       return "Can't reach the server right now — try again in a moment.";
     return error.detail ?? "Something went wrong. Try again.";
@@ -23,6 +27,7 @@ export function RegisterScreen() {
   const navigate = useNavigate();
   const { isAuthenticated, isLoading } = useSession();
   const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -31,6 +36,10 @@ export function RegisterScreen() {
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
+    if (username.length < 3 || username.length > 32 || !USERNAME_RE.test(username)) {
+      setError("Username must be 3–32 characters: letters, numbers, dot, dash or underscore.");
+      return;
+    }
     if (password.length < 8) {
       setError("Password must be at least 8 characters.");
       return;
@@ -38,7 +47,7 @@ export function RegisterScreen() {
     setError(null);
     setSubmitting(true);
     try {
-      await register(email, password);
+      await register(email, username, password);
       navigate("/", { replace: true });
     } catch (err) {
       setError(messageFor(err));
@@ -61,6 +70,18 @@ export function RegisterScreen() {
         required
         value={email}
         onChange={(e) => setEmail(e.target.value)}
+      />
+      <AuthField
+        id="username"
+        label="Username"
+        type="text"
+        autoComplete="username"
+        required
+        minLength={3}
+        maxLength={32}
+        placeholder="shown on the leaderboard"
+        value={username}
+        onChange={(e) => setUsername(e.target.value.trim())}
       />
       <AuthField
         id="password"

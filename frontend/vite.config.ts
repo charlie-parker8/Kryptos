@@ -25,6 +25,13 @@ export default defineConfig({
       '/holdings': 'http://localhost:8000',
       '/health': 'http://localhost:8000',
       '/ws': { target: 'ws://localhost:8000', ws: true },
+      // `/leaderboard` is also a client-side route, so only proxy the XHR/fetch calls
+      // (Accept: */*) to the API — let full-page navigations fall through to the SPA.
+      '/leaderboard': {
+        target: 'http://localhost:8000',
+        bypass: (req) =>
+          req.headers.accept?.includes('text/html') ? '/index.html' : undefined,
+      },
     },
   },
 })

@@ -16,10 +16,30 @@ export type {
 export interface SessionUser {
   id: string;
   email: string;
+  /** unique, chosen at registration; the leaderboard's display name */
+  username: string;
   cash_balance: string;
   starting_cash_balance: string;
   /** ISO 8601, UTC */
   created_at: string;
+}
+
+/** `GET /leaderboard`. Money fields are decimal strings; `move` and `rank` are numbers. */
+export interface LeaderboardEntry {
+  rank: number;
+  username: string;
+  net_worth: string;
+  /** previous rank minus current rank: positive = climbed, negative = fell, 0 = new/unchanged */
+  move: number;
+  is_you: boolean;
+}
+
+export interface LeaderboardResponse {
+  entries: LeaderboardEntry[];
+  /** the viewer's own row, present only when they rank below `entries` */
+  you: LeaderboardEntry | null;
+  /** ISO 8601, UTC */
+  as_of: string;
 }
 
 export type OrderSide = "buy" | "sell";

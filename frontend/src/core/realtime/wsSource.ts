@@ -20,13 +20,18 @@ function wsUrl(): string {
   return `${scheme}://${window.location.host}/ws`;
 }
 
+const MESSAGE_TYPES = new Set([
+  "price_tick",
+  "portfolio_update",
+  "bankruptcy_reset",
+]);
+
 function isRealtimeMessage(value: unknown): value is RealtimeMessage {
   return (
     typeof value === "object" &&
     value !== null &&
     "type" in value &&
-    ((value as { type: unknown }).type === "price_tick" ||
-      (value as { type: unknown }).type === "portfolio_update")
+    MESSAGE_TYPES.has((value as { type: string }).type)
   );
 }
 

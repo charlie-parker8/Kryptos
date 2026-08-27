@@ -126,6 +126,25 @@
       transform: translateX(-50%);
     }
   }
+
+  /* Modal — a quick, small entrance; the reduced-motion backstop below neutralises it. */
+  .k-modal-backdrop {
+    animation: k-modal-fade 140ms ease-out;
+  }
+  .k-modal-panel {
+    animation: k-modal-rise 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  @keyframes k-modal-fade {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes k-modal-rise {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+  }
 }
 
 /* Frozen mode (screenshots): hold looping animations at their first frame. */

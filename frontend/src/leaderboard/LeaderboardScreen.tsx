@@ -1,21 +1,20 @@
+import type { LeaderboardEntry } from "@/core/api/types";
+import { useLeaderboard } from "@/core/hooks/useLeaderboard";
 import { formatUsd } from "@/core/lib/money";
-import { ComingSoon } from "@/core/primitives/ComingSoon";
-import { MOCK_STANDINGS, type Standing } from "./placeholderData";
 
 export function LeaderboardScreen() {
+  const { standings, you, isLoading, error } = useLeaderboard();
+
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <header className="border-b border-border pb-6">
-        <div className="flex items-baseline justify-between">
-          <h1 className="text-[0.6875rem] font-medium uppercase tracking-[0.12em] text-muted">
-            Leaderboard
-          </h1>
-          <ComingSoon />
-        </div>
+        <h1 className="text-[0.6875rem] font-medium uppercase tracking-[0.12em] text-muted">
+          Leaderboard
+        </h1>
         <p className="mt-2 max-w-prose text-sm text-muted">
-          Ranked by net worth, updated as the market moves. The live standings
-          service isn't wired up yet — the figures below are illustrative so you
-          can see the shape of it.
+          Every account ranked by net worth — cash plus the market value of
+          holdings — updated as the market moves. The move column is the change in
+          rank since the last standings sweep.
         </p>
       </header>
 
@@ -29,10 +28,45 @@ export function LeaderboardScreen() {
               <th className="text-right">Move</th>
             </tr>
           </thead>
-          <tbody className="opacity-70">
-            {MOCK_STANDINGS.map((row) => (
-              <StandingRow key={row.rank} row={row} />
-            ))}
+          <tbody>
+            {error ? (
+              <tr>
+                <td colSpan={4} className="py-8 text-center text-down">
+                  Couldn't load the standings.
+                </td>
+              </tr>
+            ) : isLoading || !standings ? (
+              <tr>
+                <td colSpan={4} className="py-8 text-center text-muted">
+                  Loading…
+                </td>
+              </tr>
+            ) : standings.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="py-8 text-center text-muted">
+                  No standings yet — place a trade to get on the board.
+                </td>
+              </tr>
+            ) : (
+              <>
+                {standings.map((row) => (
+                  <StandingRow key={row.rank} row={row} />
+                ))}
+                {you ? (
+                  <>
+                    <tr>
+                      <td
+                        colSpan={4}
+                        className="py-1 text-center text-[0.625rem] uppercase tracking-[0.16em] text-muted"
+                      >
+                        your position
+                      </td>
+                    </tr>
+                    <StandingRow row={you} />
+                  </>
+                ) : null}
+              </>
+            )}
           </tbody>
         </table>
       </div>
@@ -40,22 +74,22 @@ export function LeaderboardScreen() {
   );
 }
 
-function StandingRow({ row }: { row: Standing }) {
+function StandingRow({ row }: { row: LeaderboardEntry }) {
   const move =
     row.move > 0 ? `▲ ${row.move}` : row.move < 0 ? `▼ ${-row.move}` : "—";
   return (
-    <tr className={row.isYou ? "text-accent" : undefined}>
+    <tr className={row.is_you ? "text-accent" : undefined}>
       <td className="text-left font-mono text-muted">{row.rank}</td>
       <td className="text-left font-mono">
-        {row.handle}
-        {row.isYou ? (
+        {row.username}
+        {row.is_you ? (
           <span className="ml-2 text-[0.6875rem] uppercase tracking-wide">
             you
           </span>
         ) : null}
       </td>
-      <td className="text-right font-mono text-fg-strong">
-        {formatUsd(row.netWorth)}
+      <td className="text-right font-mono text-fg-strong tnum">
+        {formatUsd(row.net_worth)}
       </td>
       <td
         className={
