@@ -2,16 +2,19 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
+import redis.asyncio as redis
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import leaderboard
 from app.config import get_settings
 from app.db import get_session
 from app.deps import SESSION_COOKIE_NAME, get_current_user
 from app.models import User, UserSession
+from app.redis_client import get_redis
 from app.security import (
     generate_session_token,
     hash_password,
@@ -89,6 +92,7 @@ async def register(
     payload: RegisterRequest,
     response: Response,
     db: AsyncSession = Depends(get_session),  # noqa: B008 — FastAPI's own DI idiom
+    redis_client: redis.Redis = Depends(get_redis),  # noqa: B008 — FastAPI's own DI idiom
 ) -> User:
     settings = get_settings()
     user = User(
@@ -108,6 +112,9 @@ async def register(
         ) from None
 
     await _issue_session(db, user, response)
+    # New account enters the leaderboard at its starting cash (best-effort; the periodic
+    # rebuild backfills if Redis is briefly down).
+    await leaderboard.update_score(redis_client, user.id, user.cash_balance)
     return user
 
 

@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, status
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app import bankruptcy
 from app.config import get_settings
 from app.db import get_session_factory
 from app.deps import SESSION_COOKIE_NAME, load_user_by_session_token
@@ -53,9 +54,15 @@ async def portfolio_ws(
             snapshot = await get_portfolio_snapshot(
                 db, redis_client, get_settings(), user
             )
-        await websocket.send_json(
-            PortfolioUpdateMessage(**snapshot.model_dump()).model_dump(mode="json")
-        )
+            await websocket.send_json(
+                PortfolioUpdateMessage(**snapshot.model_dump()).model_dump(mode="json")
+            )
+            # Catch an account that went bankrupt while it was disconnected. Runs after the
+            # first snapshot so the client sees its real state, then the reset moment.
+            if snapshot.net_worth <= 0:
+                await bankruptcy.check_and_broadcast(
+                    db, redis_client, get_settings(), user
+                )
         while True:
             # No client->server protocol this phase; this only waits for a disconnect.
             # receive() returns the raw ASGI message rather than raising — Starlette only

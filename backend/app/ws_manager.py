@@ -10,7 +10,11 @@ import uuid
 
 from fastapi import WebSocket
 
-from app.ws_messages import PortfolioUpdateMessage, PriceTickMessage
+from app.ws_messages import (
+    BankruptcyResetMessage,
+    PortfolioUpdateMessage,
+    PriceTickMessage,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +46,16 @@ class ConnectionManager:
 
     async def send_portfolio_update(
         self, user_id: uuid.UUID, message: PortfolioUpdateMessage
+    ) -> None:
+        connections = self._by_user.get(user_id)
+        if not connections:
+            return
+        payload = message.model_dump(mode="json")
+        for websocket in list(connections):
+            await self._send_or_disconnect(user_id, websocket, payload)
+
+    async def send_bankruptcy_reset(
+        self, user_id: uuid.UUID, message: BankruptcyResetMessage
     ) -> None:
         connections = self._by_user.get(user_id)
         if not connections:

@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import bankruptcy, leaderboard
 from app.config import get_settings
 from app.db import get_session
 from app.deps import get_current_user
@@ -109,6 +110,11 @@ async def create_order(
         await ws_manager.send_portfolio_update(
             user.id, PortfolioUpdateMessage(**snapshot.model_dump())
         )
+        await leaderboard.update_score(redis_client, user.id, snapshot.net_worth)
+        # A fill rarely causes bankruptcy on its own (cash swaps for equal-value asset), but
+        # this is the cheap secondary guard; the check bails without locking when net worth
+        # is clearly positive.
+        await bankruptcy.check_and_broadcast(db, redis_client, settings, user)
     return order
 
 
