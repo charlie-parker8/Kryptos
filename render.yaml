@@ -1,10 +1,25 @@
-# Render Blueprint for the Kryptos API (https://render.com/docs/blueprint-spec).
-# The service can also be created from the dashboard — this file just pins the config.
+# Render Blueprint for Kryptos (https://render.com/docs/blueprint-spec).
+# Render hosts the whole backend: the FastAPI web service *and* the Key Value (Redis)
+# store it talks to. The services can also be created from the dashboard — this file
+# just pins the config.
 #
 # Single free instance by design: the app runs the price-stream + leaderboard-refresh
 # asyncio tasks and the in-process WebSocket fan-out, so it must never scale past one
 # process (the Dockerfile hard-codes `--workers 1`; do not raise `numInstances`).
+#
+# Both services default to the Oregon region. If you move one, move the other — the web
+# service reaches Key Value over Render's private network, which requires a shared region.
 services:
+  - type: keyvalue
+    name: kryptos-kv
+    plan: free
+    # Everything Kryptos puts in Redis is a rebuildable cache (price cache, leaderboard
+    # ZSET, rate-limit counters, OHLC candle cache — see CLAUDE.md invariant 8), so evict
+    # under memory pressure rather than failing writes on the price stream.
+    maxmemoryPolicy: allkeys-lru
+    # No external access — the FastAPI service connects over the private network only.
+    ipAllowList: []
+
   - type: web
     name: kryptos-api
     runtime: docker
@@ -20,13 +35,17 @@ services:
         value: "true"
       - key: KRYPTOS_STARTING_CASH_BALANCE
         value: "100000.00"
+      # Private-network URL of the Key Value store above (redis://…, no TLS). Render
+      # fills this in automatically — do not set it by hand.
+      - key: KRYPTOS_REDIS_URL
+        fromService:
+          type: keyvalue
+          name: kryptos-kv
+          property: connectionString
       # Set these in the Render dashboard (Environment → Secret) — never commit them:
       #   KRYPTOS_DATABASE_URL   postgresql+asyncpg://postgres.<ref>:<pw>@aws-0-<region>.pooler.supabase.com:5432/postgres
-      #   KRYPTOS_REDIS_URL      rediss://default:<pw>@<host>:<port>
       #   KRYPTOS_FRONTEND_ORIGIN   https://app.<your-domain>
       - key: KRYPTOS_DATABASE_URL
-        sync: false
-      - key: KRYPTOS_REDIS_URL
         sync: false
       - key: KRYPTOS_FRONTEND_ORIGIN
         sync: false

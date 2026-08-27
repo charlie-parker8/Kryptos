@@ -10,8 +10,8 @@ free hosting, and how to operate it there.
        │  fetch(credentials: "include") + WebSocket, same-site → Lax cookie rides along
        ▼
   api.<domain>   ──Render (Docker, 1 free instance: uvicorn --workers 1)
-       ├── PostgreSQL ── Supabase free (via the Supavisor pooler, session mode, TLS)
-       └── Redis ─────── Redis Cloud free (rediss:// TLS, ≤30 connections)
+       ├── PostgreSQL ──── Supabase free (via the Supavisor pooler, session mode, TLS)
+       └── Key Value ───── Render Key Value free (private network, redis://, 25 MB, ≤50 conns)
 
   GitHub Actions cron ── GET https://api.<domain>/health every ~10 min (keep-alive)
 ```
@@ -25,13 +25,17 @@ bare `*.vercel.app` / `*.onrender.com` hosts are cross-*site* and would need
 **Single instance is a hard constraint.** The API process runs the price-stream and
 leaderboard-refresh asyncio tasks and an in-process WebSocket fan-out. Never raise the
 worker count or instance count — the Dockerfile pins `--workers 1` and `render.yaml` uses a
-single free service.
+single free web service.
+
+**Redis lives on Render too.** The cache/leaderboard store is a Render Key Value instance
+(Render's managed Redis), reached from the API over Render's private network — same
+provider, same account, no separate signup, no public internet hop, no TLS.
 
 ## Prerequisites
 
 - A custom domain you control DNS for.
 - Accounts: [Vercel](https://vercel.com), [Render](https://render.com),
-  [Supabase](https://supabase.com), [Redis Cloud](https://redis.com/try-free/).
+  [Supabase](https://supabase.com). (Render Key Value comes with the Render account.)
 - The repo pushed to GitHub (Render and Vercel deploy from it).
 
 ## 1. DNS
@@ -61,26 +65,36 @@ Add two records at your DNS provider (fill in the targets from steps 4 and 5):
 Free-tier note: the project **pauses after 7 days of no activity** and must be resumed from
 the dashboard. The keep-alive job (step 6) prevents this as long as it keeps running.
 
-## 3. Redis Cloud
+## 3. Render Key Value (Redis)
 
-1. Create a free (30 MB "Essentials") database.
-2. Enable **TLS / SSL** on the database.
-3. Copy the endpoint (`<host>:<port>`) and password, and assemble:
-   `KRYPTOS_REDIS_URL=rediss://default:<password>@<host>:<port>`  (note `rediss`, not `redis`).
+Nothing to do here if you deploy via the Blueprint in step 4 — `render.yaml` declares a
+free `kryptos-kv` Key Value instance and wires `KRYPTOS_REDIS_URL` into the API service
+automatically (private-network `redis://` URL, no TLS, no secret to copy).
 
-The app caps its connection pool at 20 (`app/redis_client.py`) — under the 30-connection
-free limit. Redis Cloud free is not metered per command, which matters: the price stream
-writes to the cache several times a second while the instance is awake.
+Manual setup (Option B in step 4): **New → Key Value**, name `kryptos-kv`, instance type
+**Free**, same region as the web service, **Maxmemory policy `allkeys-lru`**. Leave the IP
+allow list empty so only Render-internal clients can connect. Then on the web service set
+`KRYPTOS_REDIS_URL` to the instance's **Internal Key Value URL** (`redis://red-…:6379`).
+
+The app caps its connection pool at 20 (`app/redis_client.py`) — under the free plan's
+50-connection limit. Render Key Value free is not metered per command (matters: the price
+stream writes to the cache several times a second while the instance is awake) but has
+**no persistence** — a restart or deploy empties it. That's fine: every key is a
+rebuildable cache (prices refill from Kraken within seconds; the leaderboard ZSET is
+rebuilt from Postgres on the next refresh cycle and backfilled on login — CLAUDE.md
+invariant 8).
 
 ## 4. Render (API)
 
 Option A — Blueprint: in Render, **New → Blueprint**, point at the repo. It reads
-`render.yaml` and creates the `kryptos-api` service. You'll be prompted for the `sync:false`
-env vars.
+`render.yaml` and creates the `kryptos-api` web service **and** the `kryptos-kv` Key Value
+instance, with `KRYPTOS_REDIS_URL` already wired between them. You'll be prompted only for
+the `sync:false` env vars (`KRYPTOS_DATABASE_URL`, `KRYPTOS_FRONTEND_ORIGIN`).
 
-Option B — manual: **New → Web Service** → the repo → Runtime **Docker**, Dockerfile path
-`./backend/Dockerfile`, Docker context `./backend`, Health check path `/health`, instance
-type **Free**.
+Option B — manual: create the Key Value instance first (step 3), then **New → Web Service**
+→ the repo → Runtime **Docker**, Dockerfile path `./backend/Dockerfile`, Docker context
+`./backend`, Health check path `/health`, instance type **Free**, same region as the Key
+Value instance.
 
 Set environment variables (Environment tab; mark the secrets as such):
 
@@ -89,7 +103,7 @@ Set environment variables (Environment tab; mark the secrets as such):
 | `KRYPTOS_ENVIRONMENT` | `production` |
 | `KRYPTOS_DATABASE_SSL` | `true` |
 | `KRYPTOS_DATABASE_URL` | the `postgresql+asyncpg://…pooler.supabase.com:5432/postgres` string from step 2 |
-| `KRYPTOS_REDIS_URL` | the `rediss://…` string from step 3 |
+| `KRYPTOS_REDIS_URL` | the **Internal Key Value URL** (`redis://red-…:6379`) from step 3 |
 | `KRYPTOS_FRONTEND_ORIGIN` | `https://app.<domain>` |
 | `KRYPTOS_STARTING_CASH_BALANCE` | `100000.00` (optional) |
 | `KRYPTOS_ALLOWED_HOSTS` | *(optional)* `["api.<domain>","kryptos-api.onrender.com"]` — see Troubleshooting |
@@ -166,9 +180,9 @@ migration shipped, roll the code back *and* `alembic downgrade` to the matching 
 **Logs.** Render **Logs** tab (live). The price-stream/leaderboard tasks log reconnects and
 cycle failures there.
 
-**Free-tier ceilings.** Render: 750 instance-hours/month — one always-on service is ~720–744h,
-so run only the one. Supabase: 500 MB, 2 projects. Redis Cloud: 30 MB, 30 connections.
-Vercel Hobby: non-commercial use only.
+**Free-tier ceilings.** Render web service: 750 instance-hours/month — one always-on
+service is ~720–744h, so run only the one. Render Key Value free: 25 MB, 50 connections,
+no persistence. Supabase: 500 MB, 2 projects. Vercel Hobby: non-commercial use only.
 
 **Cold starts.** With the keep-alive job running, the instance stays warm. If it lapses, the
 first request after 15 min idle takes ~30–60 s, and for the first few seconds after wake the
@@ -216,8 +230,15 @@ pooler (`:6543`). Use session mode (`:5432`). If you must use transaction mode, 
 `?prepared_statement_cache_size=0` to `KRYPTOS_DATABASE_URL` and set
 `connect_args["statement_cache_size"] = 0` in `app/db.py`.
 
-**Redis TLS handshake fails.** Confirm the URL scheme is `rediss://` and TLS is enabled on
-the Redis Cloud database.
+**Redis `Connection refused` / `Name or service not known`.** `KRYPTOS_REDIS_URL` must be
+the Key Value instance's **Internal** URL (`redis://red-…:6379`), and the web service must
+be in the **same Render region** as the Key Value instance — private networking doesn't
+cross regions. The external URL (`rediss://`) also works but needs the client IP on the
+instance's allow list.
+
+**Leaderboard is empty after a deploy.** Expected — Render Key Value free has no
+persistence, so a deploy or restart wipes the cache. It refills on the next
+leaderboard-refresh cycle and as users log in (CLAUDE.md invariant 8); no action needed.
 
 **CORS errors in the browser.** `KRYPTOS_FRONTEND_ORIGIN` must be the exact scheme+host of
 the SPA (`https://app.<domain>`, no trailing slash, no path).
@@ -232,4 +253,7 @@ The market-data adapter (`backend/app/market_data/`) is the only Kraken-specific
 `CLAUDE.md` flags that Kraken's real-time-feed redistribution terms are unconfirmed. Prices
 reach only authenticated users over `/ws`; keep a footer disclaimer and don't market the app
 as a data feed. If Render's free tier changes, **Koyeb** free is the closest Docker-friendly
-substitute — same env vars, same single-instance model.
+substitute — same env vars, same single-instance model. For the cache, any Redis-compatible
+endpoint works: point `KRYPTOS_REDIS_URL` at it (`rediss://` for an external TLS provider
+such as Redis Cloud or Upstash — note Upstash meters per command, which the price stream
+would burn through).
