@@ -25,6 +25,7 @@ class User(Base):
         PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False)
+    username: Mapped[str] = mapped_column(String(32), nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     starting_cash_balance: Mapped[Decimal] = mapped_column(
         Numeric(20, 2), nullable=False
@@ -44,6 +45,10 @@ class User(Base):
         CheckConstraint("cash_balance >= 0", name="ck_users_cash_balance_nonnegative"),
         CheckConstraint(
             "starting_cash_balance > 0", name="ck_users_starting_cash_positive"
+        ),
+        UniqueConstraint("username", name="uq_users_username"),
+        CheckConstraint(
+            "char_length(username) BETWEEN 3 AND 32", name="ck_users_username_length"
         ),
     )
 

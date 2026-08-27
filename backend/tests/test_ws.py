@@ -63,7 +63,11 @@ def _headers(key: str | None = None) -> dict[str, str]:
 async def _register(client: AsyncClient) -> dict[str, object]:
     response = await client.post(
         "/auth/register",
-        json={"email": f"{uuid.uuid4()}@example.com", "password": "correct-horse-1"},
+        json={
+            "email": f"{uuid.uuid4()}@example.com",
+            "username": f"u{uuid.uuid4().hex[:12]}",
+            "password": "correct-horse-1",
+        },
     )
     return response.json()
 

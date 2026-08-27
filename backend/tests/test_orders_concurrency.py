@@ -28,6 +28,7 @@ async def _create_user(
     async with session_factory() as session:
         user = User(
             email=f"{uuid.uuid4()}@example.com",
+            username=f"u{uuid.uuid4().hex[:12]}",
             password_hash="not-a-real-hash",
             starting_cash_balance=max(cash_balance, Decimal("1.00")),
             cash_balance=cash_balance,

@@ -18,7 +18,11 @@ def _unique_email() -> str:
 async def _register(client: AsyncClient) -> dict[str, object]:
     response = await client.post(
         "/auth/register",
-        json={"email": _unique_email(), "password": "correct-horse-1"},
+        json={
+            "email": _unique_email(),
+            "username": f"u{uuid.uuid4().hex[:12]}",
+            "password": "correct-horse-1",
+        },
     )
     return response.json()
 
