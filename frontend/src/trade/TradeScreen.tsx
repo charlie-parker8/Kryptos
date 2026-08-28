@@ -11,9 +11,7 @@ export function TradeScreen() {
           Trade
         </h1>
         <p className="mt-2 max-w-prose text-sm text-muted">
-          Isolated-margin long/short. Commit collateral at a leverage preset; the
-          server marks, prices, and liquidates against the live Kraken price — never
-          the number on screen.
+          Isolated-margin long/short against live Kraken prices
         </p>
       </header>
 
