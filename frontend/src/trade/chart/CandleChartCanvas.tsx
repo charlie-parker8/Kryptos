@@ -25,6 +25,10 @@ interface Props {
   interval: CandleInterval;
 }
 
+// Bars visible when a timeframe first loads — a wide-angle view, not the tight cluster
+// lightweight-charts' default bar spacing would show. Older history stays a scroll away.
+const DEFAULT_VISIBLE_BARS = 160;
+
 export function CandleChartCanvas({ bars, interval }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -35,7 +39,13 @@ export function CandleChartCanvas({ bars, interval }: Props) {
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    const chart = createChart(el, { autoSize: true });
+    // Seed the real container size so the first visible-range calc isn't racing the
+    // ResizeObserver autoSize uses (a 0-width first frame sticks as wrong bar spacing).
+    const chart = createChart(el, {
+      width: el.clientWidth,
+      height: el.clientHeight,
+      autoSize: true,
+    });
     chartRef.current = chart;
     seriesRef.current = chart.addSeries(CandlestickSeries);
     seededIntervalRef.current = null;
@@ -61,8 +71,16 @@ export function CandleChartCanvas({ bars, interval }: Props) {
     const freshTimeframe = seededIntervalRef.current !== interval;
     const priorRange = freshTimeframe ? null : timeScale.getVisibleLogicalRange();
     series.setData(bars);
-    if (priorRange) timeScale.setVisibleLogicalRange(priorRange);
-    else timeScale.fitContent();
+    if (priorRange) {
+      timeScale.setVisibleLogicalRange(priorRange);
+    } else if (bars.length > DEFAULT_VISIBLE_BARS) {
+      timeScale.setVisibleLogicalRange({
+        from: bars.length - DEFAULT_VISIBLE_BARS,
+        to: bars.length + 3, // a few bars of right margin
+      });
+    } else {
+      timeScale.fitContent();
+    }
     seededIntervalRef.current = interval;
     containerRef.current?.setAttribute("data-chart-ready", "1");
   }, [bars, interval]);
