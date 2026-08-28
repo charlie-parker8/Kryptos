@@ -7,6 +7,8 @@ import { RegisterScreen } from "@/auth/RegisterScreen";
 import { AppShell } from "@/dashboard/AppShell";
 import { Dashboard } from "@/dashboard/Dashboard";
 import { LeaderboardScreen } from "@/leaderboard/LeaderboardScreen";
+import { PrivacyScreen } from "@/legal/PrivacyScreen";
+import { TermsScreen } from "@/legal/TermsScreen";
 import { TradeScreen } from "@/trade/TradeScreen";
 
 export const router = createBrowserRouter([
@@ -26,6 +28,8 @@ export const router = createBrowserRouter([
       </AuthLayout>
     ),
   },
+  { path: "/terms", element: <TermsScreen /> },
+  { path: "/privacy", element: <PrivacyScreen /> },
   {
     element: (
       <RequireAuth>

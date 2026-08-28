@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from "react-router";
+import { Link, NavLink, Outlet } from "react-router";
 
 import { RealtimeConnector } from "@/app/RealtimeConnector";
 import { LiveDot } from "@/core/primitives/LiveDot";
@@ -65,6 +65,17 @@ export function AppShell() {
 
       <footer className="sticky bottom-0 shrink-0">
         <TapeTicker />
+        <div className="flex flex-wrap items-center justify-center gap-x-3 border-t border-border bg-bg px-3 py-1 text-center text-[0.625rem] text-muted">
+          <span>Paper trading — fake money, real prices, not investment advice.</span>
+          <span className="flex gap-3">
+            <Link to="/terms" className="transition-colors hover:text-fg">
+              Terms
+            </Link>
+            <Link to="/privacy" className="transition-colors hover:text-fg">
+              Privacy
+            </Link>
+          </span>
+        </div>
       </footer>
     </div>
   );
