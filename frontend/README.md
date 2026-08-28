@@ -12,8 +12,9 @@ because they are physical objects. Toggle in the top bar; the choice persists
 (`localStorage`, versioned) and otherwise follows the OS setting. IBM Plex Sans + Mono.
 
 Screens: **Auth** (`/login`, `/register` — the latter takes a unique username, the
-leaderboard's display name), **Dashboard** (`/`), **Trade** (`/trade`), and **Leaderboard**
-(`/leaderboard`). The app runs on the real backend behind a Vite dev proxy — cookie auth,
+leaderboard's display name), **Dashboard** (`/`), **Trade** (`/trade`), **Leaderboard**
+(`/leaderboard`), and the standalone **legal** pages (`/terms`, `/privacy`). The app runs
+on the real backend behind a Vite dev proxy — cookie auth,
 `GET /portfolio` for the first account snapshot, `POST /positions` /
 `POST /positions/{id}/close` / `GET /positions`, `GET /leaderboard` (polled), and the
 `/ws` stream for live prices + `account_update` revaluation + `position_update` (the
@@ -43,7 +44,7 @@ feed on one deterministic frame (for screenshots).
 ```
 src/
   main.tsx             fonts + SWRConfig + router
-  routes.tsx           /login /register public; /  /trade  /leaderboard behind <RequireAuth>
+  routes.tsx           /login /register /terms /privacy public; /  /trade  /leaderboard behind <RequireAuth>
   theme.ts             light/dark state (data-theme on <html>, no-flash script in index.html)
   app/                 RequireAuth (route gate), RealtimeConnector (opens the feed once authed)
   core/                data + behaviour, provider-agnostic
@@ -61,6 +62,7 @@ src/
                        BankruptcyModal, LiquidationToast
   trade/               TradeScreen, PositionTicket, PositionBlotter
   leaderboard/         LeaderboardScreen (+ placeholderData for ?mock)
+  legal/               LegalPage shell + TermsScreen, PrivacyScreen (standalone, no app chrome)
   styles/
     index.css           Tailwind @theme mapping + base + browser-surface + reduced-motion
     theme.css           the --k-* palette (light + dark) + component styles (flap, tape, ledger)

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Link } from "react-router";
 
 /** The shell for the login / register screens — centred card on the trading-desk ground. */
 export function AuthLayout({ children }: { children: ReactNode }) {
@@ -16,6 +17,15 @@ export function AuthLayout({ children }: { children: ReactNode }) {
         <div className="border border-border bg-surface p-6">{children}</div>
         <p className="mt-4 text-center text-[0.6875rem] leading-relaxed text-muted">
           Fake money, real prices. No trade ever settles for real.
+        </p>
+        <p className="mt-2 text-center text-[0.6875rem] text-muted">
+          <Link to="/terms" className="transition-colors hover:text-fg">
+            Terms
+          </Link>
+          <span className="mx-2">·</span>
+          <Link to="/privacy" className="transition-colors hover:text-fg">
+            Privacy
+          </Link>
         </p>
       </div>
     </div>
