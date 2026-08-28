@@ -8,10 +8,10 @@
  * synthetic users first, e.g.:
  *
  *   docker compose up -d
- *   python -c "import asyncio,uuid; from decimal import Decimal; \
+ *   python -c "import asyncio,uuid; \
  *     import redis.asyncio as r; \
  *     c=r.from_url('redis://localhost:6379/0'); \
- *     asyncio.run(c.zadd('leaderboard:networth', {str(uuid.uuid4()): 10_000_000 + i for i in range(5000)}))"
+ *     asyncio.run(c.zadd('leaderboard:equity', {str(uuid.uuid4()): 1_000_000 + i for i in range(5000)}))"
  *
  * Then, with the app running on :8000:
  *   k6 run backend/benchmarks/k6/leaderboard_latency.js

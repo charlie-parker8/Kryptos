@@ -3,6 +3,7 @@ from decimal import Decimal
 
 import pytest
 import redis.asyncio as redis
+from helpers import open_position, set_market_price
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -37,7 +38,7 @@ async def _make_user(
             email=f"{uuid.uuid4()}@example.com",
             username=_uid(),
             password_hash="not-a-real-hash",
-            starting_cash_balance=Decimal("100000.00"),
+            starting_cash_balance=Decimal("10000.00"),
             cash_balance=cash,
         )
         session.add(user)
@@ -75,7 +76,7 @@ async def test_registration_seeds_a_leaderboard_score(
 
 
 @pytest.mark.asyncio
-async def test_leaderboard_ranks_by_net_worth_desc(
+async def test_leaderboard_ranks_by_equity_desc(
     client: AsyncClient, redis_client: redis.Redis
 ) -> None:
     u1 = await _register(client)
@@ -83,13 +84,13 @@ async def test_leaderboard_ranks_by_net_worth_desc(
     u3 = await _register(client)  # client is now authenticated as u3
 
     await leaderboard.update_score(
-        redis_client, uuid.UUID(str(u1["id"])), Decimal("150000.00")
+        redis_client, uuid.UUID(str(u1["id"])), Decimal("15000.00")
     )
     await leaderboard.update_score(
-        redis_client, uuid.UUID(str(u2["id"])), Decimal("90000.00")
+        redis_client, uuid.UUID(str(u2["id"])), Decimal("-500.00")
     )
     await leaderboard.update_score(
-        redis_client, uuid.UUID(str(u3["id"])), Decimal("120000.00")
+        redis_client, uuid.UUID(str(u3["id"])), Decimal("12000.00")
     )
 
     body = (await client.get("/leaderboard")).json()
@@ -101,7 +102,8 @@ async def test_leaderboard_ranks_by_net_worth_desc(
         u2["username"],
     ]
     assert [e["rank"] for e in entries] == [1, 2, 3]
-    assert Decimal(str(entries[0]["net_worth"])) == Decimal("150000.00")
+    assert Decimal(str(entries[0]["equity"])) == Decimal("15000.00")
+    assert Decimal(str(entries[2]["equity"])) == Decimal("-500.00")  # negative sorts last
     assert entries[1]["is_you"] is True  # u3 is the viewer
     assert body["you"] is None  # viewer is inside the page
 
@@ -128,7 +130,7 @@ async def test_leaderboard_returns_your_row_when_outside_the_page(
     assert body["you"] is not None
     assert body["you"]["rank"] == 4
     assert body["you"]["is_you"] is True
-    assert Decimal(str(body["you"]["net_worth"])) == Decimal("1000.00")
+    assert Decimal(str(body["you"]["equity"])) == Decimal("1000.00")
 
 
 @pytest.mark.asyncio
@@ -161,9 +163,9 @@ async def test_rebuild_repopulates_the_zset_purely_from_postgres(
 
     assert count >= 2
     # The two huge balances pin these accounts to the top regardless of other test data.
-    assert board.entries[0].net_worth == Decimal("9990000.00")
+    assert board.entries[0].equity == Decimal("9990000.00")
     assert board.entries[0].is_you is True
-    assert board.entries[1].net_worth == Decimal("9980000.00")
+    assert board.entries[1].equity == Decimal("9980000.00")
     assert board.entries[1].username != ""
     _ = id_b
 
@@ -250,24 +252,19 @@ async def test_registration_survives_a_redis_outage(
 
 
 @pytest.mark.asyncio
-async def test_a_filled_buy_refreshes_the_leaderboard_score(
+async def test_opening_a_position_refreshes_the_leaderboard_score(
     client: AsyncClient,
     redis_client: redis.Redis,
     fake_market_data: FakeMarketData,
 ) -> None:
     user = await _register(client)
-    fake_market_data.set_price(
-        "BTC/USD", bid=Decimal(50000), ask=Decimal(50000), last=Decimal(50000)
-    )
+    await set_market_price(fake_market_data, redis_client, "BTC/USD", "50000")
 
     await redis_client.zadd(leaderboard.ZSET_KEY, {str(user["id"]): 1})  # stale value
 
-    await client.post(
-        "/orders",
-        json={"symbol": "BTC/USD", "side": "buy", "quantity": "0.1"},
-        headers={"Idempotency-Key": str(uuid.uuid4())},
-    )
+    await open_position(client, pair="BTC/USD", side="long", collateral="1000")
 
     score = await redis_client.zscore(leaderboard.ZSET_KEY, str(user["id"]))
-    # net worth after a buy is ~unchanged from the $100k start (cash -> asset of equal value)
-    assert score == pytest.approx(100000 * 100, rel=1e-4)
+    # Equity right after opening is ~unchanged from the $10k start (collateral still
+    # counts toward equity, P&L is zero at entry).
+    assert score == pytest.approx(10000 * 100, rel=1e-4)

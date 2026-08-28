@@ -1,15 +1,16 @@
-"""Pydantic schemas for the two message types app.routers.ws pushes over `/ws`. Kept separate
-from app.portfolio so the WS-only concerns (a `type` discriminator, `broadcast_at`) don't leak
-into the plain REST `PortfolioSnapshot` response shape those messages otherwise mirror exactly.
+"""Pydantic schemas for the messages app.routers.ws pushes over `/ws`. Kept separate from
+app.account so the WS-only concerns (a `type` discriminator, `broadcast_at`) don't leak
+into the plain REST `AccountSnapshot` response shape `account_update` otherwise mirrors.
 """
 
+import uuid
 from datetime import datetime
 from decimal import Decimal
 from typing import Literal
 
 from pydantic import BaseModel
 
-from app.portfolio import PortfolioSnapshot
+from app.account import AccountSnapshot
 
 
 class PriceTickMessage(BaseModel):
@@ -22,8 +23,30 @@ class PriceTickMessage(BaseModel):
     broadcast_at: int  # unix ms — docs/metrics-benchmark-plan.md Milestone A measures against this
 
 
-class PortfolioUpdateMessage(PortfolioSnapshot):
-    type: Literal["portfolio_update"] = "portfolio_update"
+class AccountUpdateMessage(AccountSnapshot):
+    """A per-user snapshot: free cash, derived equity, total unrealized P&L, and every open
+    position valued at the latest `last` price. Sent on `/ws` connect, after an open or
+    close, and per tick to users holding a position on the ticked pair.
+    """
+
+    type: Literal["account_update"] = "account_update"
+
+
+class PositionUpdateMessage(BaseModel):
+    """Sent to one user's connections when a position reaches a terminal state — a user
+    close, an automatic liquidation, or a bankruptcy reset. Drives the blotter refresh and
+    (for liquidations) a toast. An `account_update` with the new balances follows.
+    """
+
+    type: Literal["position_update"] = "position_update"
+    position_id: uuid.UUID
+    pair: str
+    side: Literal["long", "short"]
+    status: Literal["closed", "liquidated"]
+    close_price: Decimal
+    realized_pnl: Decimal
+    reason: Literal["user", "liquidation", "bankruptcy"]
+    at: datetime
 
 
 class CandleUpdateMessage(BaseModel):
@@ -46,11 +69,12 @@ class CandleUpdateMessage(BaseModel):
 
 
 class BankruptcyResetMessage(BaseModel):
-    """Pushed to one user's connections when their net worth hit $0 and the account was
-    reset (see app.bankruptcy). A `portfolio_update` with the restored balances follows.
+    """Pushed to one user's connections when their account equity hit the floor and the
+    account was reset (see app.bankruptcy). A `position_update` per closed position and an
+    `account_update` with the restored balance follow.
     """
 
     type: Literal["bankruptcy_reset"] = "bankruptcy_reset"
     starting_cash_balance: Decimal
-    cleared_symbols: list[str]
+    closed_positions: list[str]  # pair strings, e.g. ["BTC/USD", "ETH/USD"]
     reset_at: datetime

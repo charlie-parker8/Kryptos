@@ -1,4 +1,4 @@
-"""The leaderboard read surface — a single ranked-by-net-worth view served from the Redis
+"""The leaderboard read surface — a single ranked-by-equity view served from the Redis
 sorted set (see app.leaderboard). The client polls this; there is no WebSocket push for
 rankings.
 """

@@ -30,9 +30,9 @@ Decisions already made with the user:
 1. "Built a real-time crypto paper-trading platform using FastAPI, React, and Kraken REST
    and WebSockets APIs, supporting X+ concurrent simulated users at p95 Y ms
    tick-to-client latency in k6 load tests."
-2. "Engineered idempotent order execution with PostgreSQL row locks and unique
-   constraints, sustaining Z orders per second across N+ concurrent and duplicate
-   submissions with zero invariant violations."
+2. "Engineered idempotent leveraged-position execution with PostgreSQL row locks and unique
+   constraints, sustaining Z positions per second across N+ concurrent opens, duplicate
+   submissions, and close-vs-liquidation races with zero invariant violations."
 3. "Implemented Redis price caching and a sorted-set leaderboard, cutting Kraken API calls
    by X% while serving live rankings for N accounts at Y ms p95 latency under sustained
    concurrent read workloads."
@@ -48,7 +48,7 @@ asserted.
   precision, and matches this plan's own original phrasing). Note this bullet deliberately
   claims WS tick delivery latency only, not portfolio-recalculation latency — that's more
   conservative than the earlier draft and matches exactly what `broadcast_at` measures.
-- Bullet 2 ↔ Milestone B (extended pytest concurrency test). Direct match — orders/sec and
+- Bullet 2 ↔ Milestone B (pytest concurrency test). Direct match — positions/sec and
   zero-invariant-violations are exactly what that test is designed to produce.
 - Bullet 3 ↔ Milestone C (`cache_effectiveness.py` + `leaderboard_latency.js`). Direct
   match for the % API-call reduction and p95 read latency. "Sustained concurrent read
@@ -82,19 +82,21 @@ accounts), and the measured numbers. This is the traceability record behind bull
   ceiling is bullet 1's "N+" and "Y ms".
 - Feeds: **bullet 1**.
 
-### Milestone B — after market buy/sell order execution + row-locking + idempotency ship
-- CLAUDE.md already requires a pytest concurrency test covering exact-balance buys,
-  zero-unit sells, and duplicate/concurrent orders, run against the real Postgres test DB
-  (existing `backend/tests/conftest.py` fixtures + `kryptos_test` DB from
-  `infra/postgres/init-test-db.sh`). No new test category — extend that required test to:
-  - fire M concurrent submissions sharing one idempotency key and assert single execution;
-  - fire concurrent buy/sell orders racing a tight cash/holdings balance and assert
-    invariants 1–3 never break;
-  - wrap the concurrent batch in `time.perf_counter()` to derive orders/sec.
+### Milestone B — after leveraged position open/close + row-locking + idempotency ship
+- CLAUDE.md requires a pytest concurrency test covering exact-free-cash opens,
+  one-per-pair rejection, duplicate/concurrent opens, and the user-close-vs-liquidation
+  race, run against the real Postgres test DB (`backend/tests/conftest.py` fixtures +
+  `kryptos_test` DB from `infra/postgres/init-test-db.sh`). See
+  `backend/tests/test_positions_concurrency.py`. It should:
+  - fire M concurrent opens sharing one idempotency key and assert a single position;
+  - fire concurrent opens racing a tight free-cash balance and assert invariants 1–2 hold;
+  - fire a user close and a liquidation at the same position and assert exactly one
+    terminal transition, one ledger entry, and consistent cash (invariant 3/7);
+  - wrap a batch of N open+close round trips in `time.perf_counter()` to derive positions/sec.
 - Append the throughput/violation-count result to `RESULTS.md` after each run.
-- Optional: a k6 script against the HTTP order endpoint can add an HTTP-layer
-  throughput/latency number, but the pytest/DB-level test stays the sole authority on
-  "zero invariant violations" since it can assert actual ledger/balance/holdings state.
+- Optional: a k6 script against `POST /positions` can add an HTTP-layer throughput number,
+  but the pytest/DB-level test stays the sole authority on "zero invariant violations"
+  since it can assert actual ledger/cash/position state.
 - Feeds: **bullet 2**.
 
 ### Milestone C — after Redis price cache + leaderboard ship

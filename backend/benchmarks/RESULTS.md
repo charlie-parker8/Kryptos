@@ -102,3 +102,27 @@ only `:forming` warm and makes no REST calls.
 - Elapsed: 2.013s
 - Throughput: 99.4 orders/sec
 - Invariant violations: 0 (cash_balance and holdings asserted non-negative after the batch)
+
+### 2026-08-28 — 1162689
+- N concurrent open+close round trips (distinct accounts): 200
+- Elapsed: 1.051s
+- Throughput: 190.3 round trips/sec
+- Invariant violations: 0 (cash_balance non-negative, exactly one terminal ledger entry per position, asserted after the batch)
+
+### 2026-08-28 — 1162689
+- N concurrent open+close round trips (distinct accounts): 200
+- Elapsed: 1.149s
+- Throughput: 174.1 round trips/sec
+- Invariant violations: 0 (cash_balance non-negative, exactly one terminal ledger entry per position, asserted after the batch)
+
+### 2026-08-28 — 1162689
+- N concurrent open+close round trips (distinct accounts): 200
+- Elapsed: 1.102s
+- Throughput: 181.5 round trips/sec
+- Invariant violations: 0 (cash_balance non-negative, exactly one terminal ledger entry per position, asserted after the batch)
+
+### 2026-08-28 — 1162689
+- N concurrent open+close round trips (distinct accounts): 200
+- Elapsed: 1.147s
+- Throughput: 174.4 round trips/sec
+- Invariant violations: 0 (cash_balance non-negative, exactly one terminal ledger entry per position, asserted after the batch)

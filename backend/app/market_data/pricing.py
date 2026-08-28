@@ -1,36 +1,36 @@
-"""Executable-price selection and quote-freshness validation.
+"""Mark-price selection and quote-freshness validation.
 
 Pure functions, no I/O — kept separate from the Kraken adapter (app.market_data.kraken)
-and the price cache (app.market_data.cache) so order execution's invariant checks can be
+and the price cache (app.market_data.cache) so position execution's invariant checks can be
 unit-tested without a network or a database.
+
+The leveraged-position model uses a single price everywhere — Kraken's `last` — for entry,
+mark (unrealized P&L), exit and liquidation. There is no bid/ask spread cost.
 """
 
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Literal
 
 from app.market_data.kraken import Ticker
-
-OrderSide = Literal["buy", "sell"]
 
 
 class StalePriceError(RuntimeError):
     """The freshest known quote for a pair is older than the configured max age (invariant 10)."""
 
 
-def executable_price(ticker: Ticker, side: OrderSide) -> Decimal:
-    """The price invariant 6 requires an order fill at: buys cross the ask, sells cross the
-    bid. Never `last` — it reflects whichever side happened to trade last, not what a new
-    order of the opposite side would need to pay/receive right now.
+def mark_price(ticker: Ticker) -> Decimal:
+    """The one price the position model runs on. `last` — the price the pair actually
+    traded at — not `bid`/`ask`, which only mattered for the old spot spread-crossing model.
     """
-    return ticker.ask if side == "buy" else ticker.bid
+    return ticker.last
 
 
 def ensure_fresh(
     ticker: Ticker, *, max_age_seconds: int, now: datetime | None = None
 ) -> None:
-    """Enforce invariant 10: raise rather than let a cash/holdings-mutating action use a
-    quote older than `max_age_seconds`. `now` is injectable for deterministic tests.
+    """Enforce invariant 10: raise rather than let a cash-mutating action (open, close,
+    liquidation, bankruptcy re-valuation) use a quote older than `max_age_seconds`. `now`
+    is injectable for deterministic tests.
     """
     now = now if now is not None else datetime.now(UTC)
     age_seconds = (now - ticker.as_of).total_seconds()

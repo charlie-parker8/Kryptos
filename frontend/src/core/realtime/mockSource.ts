@@ -1,39 +1,58 @@
 /**
  * Fake market feed for the prototypes. Emits messages in the *exact* shape of the backend
- * `/ws` stream (`price_tick`, `portfolio_update`) so the eventual real
+ * `/ws` stream (`price_tick`, `account_update`, `candle_update`) so the real
  * `WebSocket('/ws')` wrapper is a drop-in replacement behind `RealtimeSource`.
  *
  * All prices/levels here are illustrative, not real market data.
  */
 
+import { previewLiquidationPrice } from "@/core/lib/money";
 import { mockCandleUpdate } from "./mockCandles";
 import { gaussian, mulberry32 } from "./mockRng";
 import type {
-  Asset,
+  AccountUpdate,
   Pair,
-  PortfolioUpdate,
+  PositionSide,
+  PositionValuation,
   PriceTick,
   RealtimeMessage,
   RealtimeSource,
 } from "./types";
 import { CANDLE_INTERVALS, PAIRS } from "./types";
 
-export const STARTING_CASH = "100000.00";
+export const STARTING_CASH = "10000.00";
 
-interface MockHolding {
-  symbol: Asset;
-  quantity: string;
-  average_cost: string;
+interface MockPositionSeed {
+  id: string;
+  pair: Pair;
+  side: PositionSide;
+  leverage: number;
+  collateral: number;
+  entry: number;
 }
 
 /**
- * Seeded so a mock session always tells the same story: net worth a little above the
- * $100,000 start (~+3.5%), one clear winner per position, room left in cash.
+ * Seeded so a mock session always tells the same story: a winning BTC long, a losing ETH
+ * short, ~half the balance still free.
  */
-const MOCK_CASH = "33380.00";
-const MOCK_HOLDINGS: MockHolding[] = [
-  { symbol: "BTC", quantity: "0.5000000000", average_cost: "91000.00000000" },
-  { symbol: "ETH", quantity: "6.4000000000", average_cost: "3300.00000000" },
+const MOCK_FREE_CASH = 6000;
+const MOCK_POSITIONS: MockPositionSeed[] = [
+  {
+    id: "mock-btc-long",
+    pair: "BTC/USD",
+    side: "long",
+    leverage: 5,
+    collateral: 2500,
+    entry: 91000,
+  },
+  {
+    id: "mock-eth-short",
+    pair: "ETH/USD",
+    side: "short",
+    leverage: 10,
+    collateral: 1500,
+    entry: 3300,
+  },
 ];
 
 const SEED_PRICE: Record<Pair, number> = {
@@ -49,17 +68,13 @@ const PER_TICK_VOL: Record<Pair, number> = {
 };
 
 interface MockOptions {
-  /** Emit one deterministic round of ticks + a portfolio update, then stop. For screenshots. */
+  /** Emit one deterministic round of ticks + an account update, then stop. For screenshots. */
   frozen?: boolean;
   /** Base interval between ticks, ms (jittered ±40%). Ignored when frozen. */
   intervalMs?: number;
 }
 
-const ASSET_OF: Record<Pair, Asset> = {
-  "BTC/USD": "BTC",
-  "ETH/USD": "ETH",
-  "SOL/USD": "SOL",
-};
+const ASSET_HELD_ON: Set<Pair> = new Set(MOCK_POSITIONS.map((p) => p.pair));
 
 export function createMockSource(options: MockOptions = {}): RealtimeSource {
   const { frozen = false, intervalMs = 260 } = options;
@@ -93,37 +108,51 @@ export function createMockSource(options: MockOptions = {}): RealtimeSource {
         };
       };
 
-      const buildPortfolio = (): PortfolioUpdate => {
-        let marketTotal = 0;
-        const holdings = MOCK_HOLDINGS.map((h) => {
-          const pair = `${h.symbol}/USD` as Pair;
-          const price = last[pair];
-          const value = price * Number(h.quantity);
-          marketTotal += value;
-          return {
-            symbol: h.symbol,
-            quantity: h.quantity,
-            average_cost: h.average_cost,
-            current_price: price.toFixed(2),
-            market_value: value.toFixed(2),
-            stale: Date.now() < staleUntil[pair],
-          };
-        });
-        // SOL: held-universe pair with no position — shown so the empty row has a place.
-        holdings.push({
-          symbol: "SOL",
-          quantity: "0",
-          average_cost: "0",
-          current_price: last["SOL/USD"].toFixed(2),
-          market_value: "0.00",
-          stale: false,
-        });
-        const netWorth = Number(MOCK_CASH) + marketTotal;
+      const valuePosition = (seed: MockPositionSeed): PositionValuation => {
+        const mark = last[seed.pair];
+        const notional = seed.collateral * seed.leverage;
+        const size = notional / seed.entry;
+        const upnl =
+          seed.side === "long"
+            ? size * (mark - seed.entry)
+            : size * (seed.entry - mark);
+        const equity = seed.collateral + upnl;
         return {
-          type: "portfolio_update",
-          cash_balance: MOCK_CASH,
-          holdings,
-          net_worth: netWorth.toFixed(2),
+          id: seed.id,
+          pair: seed.pair,
+          side: seed.side,
+          leverage: seed.leverage,
+          collateral: seed.collateral.toFixed(2),
+          size: size.toFixed(10),
+          entry_price: seed.entry.toFixed(8),
+          liquidation_price: (
+            previewLiquidationPrice(seed.side, String(seed.entry), seed.leverage) ??
+            0
+          ).toFixed(8),
+          mark_price: mark.toFixed(2),
+          unrealized_pnl: upnl.toFixed(2),
+          position_equity: equity.toFixed(2),
+          margin_ratio: (equity / notional).toFixed(6),
+          stale: Date.now() < staleUntil[seed.pair],
+        };
+      };
+
+      const buildAccount = (): AccountUpdate => {
+        const positions = MOCK_POSITIONS.map(valuePosition);
+        const openEquity = positions.reduce(
+          (sum, p) => sum + Number(p.position_equity),
+          0,
+        );
+        const totalUpnl = positions.reduce(
+          (sum, p) => sum + Number(p.unrealized_pnl),
+          0,
+        );
+        return {
+          type: "account_update",
+          free_cash: MOCK_FREE_CASH.toFixed(2),
+          equity: (MOCK_FREE_CASH + openEquity).toFixed(2),
+          total_unrealized_pnl: totalUpnl.toFixed(2),
+          positions,
           as_of: new Date().toISOString(),
         };
       };
@@ -136,17 +165,13 @@ export function createMockSource(options: MockOptions = {}): RealtimeSource {
         last[pair] = last[pair] * (1 + drift);
       };
 
-      // A forming candle per (pair, interval) — the mock chart's history comes from
-      // `mockCandleHistory` (no backend), this keeps its current bar moving.
       const emitCandles = (pair: Pair): void => {
         for (const interval of CANDLE_INTERVALS) {
           onMessage(mockCandleUpdate(pair, interval, last[pair]));
         }
       };
 
-      // Initial snapshot + one tick per pair, immediately — matches a real client getting
-      // the last portfolio_update on connect and the cached prices right after.
-      onMessage(buildPortfolio());
+      onMessage(buildAccount());
       for (const pair of PAIRS) {
         onMessage(emitTick(pair));
         emitCandles(pair);
@@ -158,7 +183,7 @@ export function createMockSource(options: MockOptions = {}): RealtimeSource {
           onMessage(emitTick(pair));
           emitCandles(pair);
         }
-        onMessage(buildPortfolio());
+        onMessage(buildAccount());
         return () => {};
       }
 
@@ -170,7 +195,6 @@ export function createMockSource(options: MockOptions = {}): RealtimeSource {
         if (stopped) return;
         const pair = PAIRS[Math.floor(rng() * PAIRS.length)] as Pair;
 
-        // Every ~150 ticks, let one pair go stale for a spell so the stale UI is reachable.
         tickCount += 1;
         if (tickCount % 150 === 0) {
           staleUntil[pair] = Date.now() + 16_000;
@@ -179,8 +203,8 @@ export function createMockSource(options: MockOptions = {}): RealtimeSource {
         step(pair);
         onMessage(emitTick(pair));
         emitCandles(pair);
-        if (MOCK_HOLDINGS.some((h) => ASSET_OF[pair] === h.symbol)) {
-          onMessage(buildPortfolio());
+        if (ASSET_HELD_ON.has(pair)) {
+          onMessage(buildAccount());
         }
         scheduleNext();
       };

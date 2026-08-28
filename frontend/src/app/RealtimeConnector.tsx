@@ -11,7 +11,7 @@
 
 import { useEffect } from "react";
 
-import { usePortfolioSeed } from "@/core/hooks/usePortfolio";
+import { useAccountSeed } from "@/core/hooks/useAccount";
 import { connectRealtime } from "@/core/realtime/connectRealtime";
 import { createMockSource } from "@/core/realtime/mockSource";
 import {
@@ -24,14 +24,14 @@ import { setBankruptcyEvent } from "@/core/state/bankruptcyStore";
 import { setConnectionStatus } from "@/core/state/connectionStore";
 
 export function RealtimeConnector() {
-  usePortfolioSeed(!IS_MOCK_MODE);
+  useAccountSeed(!IS_MOCK_MODE);
 
   useEffect(() => {
     if (IS_BANKRUPT_PREVIEW) {
       setBankruptcyEvent({
         type: "bankruptcy_reset",
-        starting_cash_balance: "100000.00",
-        cleared_symbols: ["BTC", "ETH"],
+        starting_cash_balance: "10000.00",
+        closed_positions: ["BTC/USD", "ETH/USD"],
         reset_at: new Date().toISOString(),
       });
     }

@@ -1,11 +1,12 @@
 /**
  * The real `/ws` feed as a `RealtimeSource` — a drop-in for `createMockSource`. The backend
- * pushes `price_tick` (broadcast) and `portfolio_update` (this user's) and never expects a
- * client message, so this only reads. Auth is the `kryptos_session` cookie, sent
- * automatically on the same-origin upgrade (Vite proxies `/ws` to :8000 in dev).
+ * pushes `price_tick` / `candle_update` (broadcast) and `account_update` /
+ * `position_update` / `bankruptcy_reset` (this user's) and never expects a client message,
+ * so this only reads. Auth is the `kryptos_session` cookie, sent automatically on the
+ * same-origin upgrade (Vite proxies `/ws` to :8000 in dev).
  *
  * Reconnects with capped exponential backoff, mirroring the backend's own
- * `run_price_stream` loop; the backend re-sends a fresh `portfolio_update` on every
+ * `run_price_stream` loop; the backend re-sends a fresh `account_update` on every
  * (re)connect, so no client-side catch-up is needed.
  *
  * Local dev: `VITE_WS_URL` is unset and the URL is derived from `window.location` (Vite
@@ -28,7 +29,8 @@ function wsUrl(): string {
 
 const MESSAGE_TYPES = new Set([
   "price_tick",
-  "portfolio_update",
+  "account_update",
+  "position_update",
   "bankruptcy_reset",
   "candle_update",
 ]);

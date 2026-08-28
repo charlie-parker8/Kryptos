@@ -13,8 +13,8 @@ import pytest
 
 from app.ws_manager import ConnectionManager
 from app.ws_messages import (
+    AccountUpdateMessage,
     CandleUpdateMessage,
-    PortfolioUpdateMessage,
     PriceTickMessage,
 )
 
@@ -41,9 +41,12 @@ def _price_tick(pair: str = "BTC/USD") -> PriceTickMessage:
     )
 
 
-def _portfolio_update() -> PortfolioUpdateMessage:
-    return PortfolioUpdateMessage(
-        cash_balance=Decimal(100), holdings=[], net_worth=Decimal(100),
+def _account_update() -> AccountUpdateMessage:
+    return AccountUpdateMessage(
+        free_cash=Decimal(100),
+        equity=Decimal(100),
+        total_unrealized_pnl=Decimal(0),
+        positions=[],
         as_of=datetime.now(UTC),
     )
 
@@ -116,25 +119,25 @@ async def test_broadcast_candle_update_reaches_every_connected_user() -> None:
 
 
 @pytest.mark.asyncio
-async def test_send_portfolio_update_only_reaches_the_target_user() -> None:
+async def test_send_account_update_only_reaches_the_target_user() -> None:
     manager = ConnectionManager()
     user_a, user_b = uuid.uuid4(), uuid.uuid4()
     ws_a, ws_b = _RecordingWebSocket(), _RecordingWebSocket()
     manager.connect(user_a, ws_a)
     manager.connect(user_b, ws_b)
 
-    await manager.send_portfolio_update(user_a, _portfolio_update())
+    await manager.send_account_update(user_a, _account_update())
 
     assert len(ws_a.sent) == 1
-    assert ws_a.sent[0]["type"] == "portfolio_update"
+    assert ws_a.sent[0]["type"] == "account_update"
     assert ws_b.sent == []
 
 
 @pytest.mark.asyncio
-async def test_send_portfolio_update_to_a_disconnected_user_is_a_noop() -> None:
+async def test_send_account_update_to_a_disconnected_user_is_a_noop() -> None:
     manager = ConnectionManager()
 
-    await manager.send_portfolio_update(uuid.uuid4(), _portfolio_update())  # must not raise
+    await manager.send_account_update(uuid.uuid4(), _account_update())  # must not raise
 
 
 @pytest.mark.asyncio

@@ -6,17 +6,16 @@
 import { useShallow } from "zustand/react/shallow";
 
 import type {
-  Asset,
   Candle,
   CandleInterval,
-  HoldingValuation,
   Pair,
+  PositionValuation,
   PriceTick,
 } from "@/core/realtime/types";
+import { useAccountStore } from "./accountStore";
 import { candleKey, useCandleStore } from "./candleStore";
 import { type ConnectionStatus, useConnectionStore } from "./connectionStore";
 import { useMarketStore } from "./marketStore";
-import { usePortfolioStore } from "./portfolioStore";
 
 const NO_CANDLES: readonly Candle[] = Object.freeze([]);
 
@@ -33,16 +32,20 @@ export function useSessionAnchor(pair: Pair): string | undefined {
   return useMarketStore((s) => s.anchors[pair]);
 }
 
-export function useNetWorth(): string | undefined {
-  return usePortfolioStore((s) => s.snapshot?.net_worth);
+export function useEquity(): string | undefined {
+  return useAccountStore((s) => s.snapshot?.equity);
 }
 
-export function useCash(): string | undefined {
-  return usePortfolioStore((s) => s.snapshot?.cash_balance);
+export function useFreeCash(): string | undefined {
+  return useAccountStore((s) => s.snapshot?.free_cash);
 }
 
-export function usePortfolioAsOf(): string | undefined {
-  return usePortfolioStore((s) => s.snapshot?.as_of);
+export function useTotalUnrealizedPnl(): string | undefined {
+  return useAccountStore((s) => s.snapshot?.total_unrealized_pnl);
+}
+
+export function useAccountAsOf(): string | undefined {
+  return useAccountStore((s) => s.snapshot?.as_of);
 }
 
 export function useIsConnected(): boolean {
@@ -69,19 +72,25 @@ export function useCandleOverlay(
   );
 }
 
-/** Have we ever received a portfolio snapshot? Drives first-paint skeletons. */
-export function useHasPortfolio(): boolean {
-  return usePortfolioStore((s) => s.snapshot !== null);
+/** Have we ever received an account snapshot? Drives first-paint skeletons. */
+export function useHasAccount(): boolean {
+  return useAccountStore((s) => s.snapshot !== null);
 }
 
-export function useHoldingSymbols(): Asset[] {
-  return usePortfolioStore(
-    useShallow((s) => (s.snapshot?.holdings ?? []).map((h) => h.symbol)),
+/** Ids of the open positions, stable-sorted by pair — the list the tables iterate. */
+export function useOpenPositionIds(): string[] {
+  return useAccountStore(
+    useShallow((s) => (s.snapshot?.positions ?? []).map((p) => p.id)),
   );
 }
 
-export function useHolding(symbol: Asset): HoldingValuation | undefined {
-  return usePortfolioStore((s) =>
-    s.snapshot?.holdings.find((h) => h.symbol === symbol),
+/** The open position on a given pair, if any (one-per-pair on the backend). */
+export function usePositionOnPair(pair: Pair): PositionValuation | undefined {
+  return useAccountStore((s) =>
+    s.snapshot?.positions.find((p) => p.pair === pair),
   );
+}
+
+export function usePosition(id: string): PositionValuation | undefined {
+  return useAccountStore((s) => s.snapshot?.positions.find((p) => p.id === id));
 }

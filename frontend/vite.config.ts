@@ -20,9 +20,8 @@ export default defineConfig({
     // the app on the deterministic mock feed with no backend at all.
     proxy: {
       '/auth': 'http://localhost:8000',
-      '/orders': 'http://localhost:8000',
+      '/positions': 'http://localhost:8000',
       '/portfolio': 'http://localhost:8000',
-      '/holdings': 'http://localhost:8000',
       '/candles': 'http://localhost:8000',
       '/health': 'http://localhost:8000',
       '/ws': { target: 'ws://localhost:8000', ws: true },
