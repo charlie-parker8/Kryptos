@@ -7,8 +7,8 @@ Vite + React + TypeScript (strict) + TailwindCSS v4.
 The **trading-desk** identity: a dimmed trading room — deep slate ink, terminal amber,
 muted sage/brick for up/down, 1px rules, no glow. Signatures are the **split-flap
 equity board** and a **ticker tape welded to the bottom edge**. Light mode is a bright
-trading floor / printed ledger; the flap board and the tape stay dark in both modes
-because they are physical objects. Toggle in the top bar; the choice persists
+trading floor / printed ledger; the ticker tape stays dark in both modes, and the
+split-flap board re-skins to cream ledger tiles. Toggle in the top bar; the choice persists
 (`localStorage`, versioned) and otherwise follows the OS setting. IBM Plex Sans + Mono.
 
 Screens: **Auth** (`/login`, `/register` — the latter takes a unique username, the

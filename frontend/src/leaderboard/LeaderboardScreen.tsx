@@ -12,7 +12,7 @@ export function LeaderboardScreen() {
           Leaderboard
         </h1>
         <p className="mt-2 text-sm text-muted">
-          Every account ranked by equity
+          Top 100 accounts ranked by equity
         </p>
       </header>
 

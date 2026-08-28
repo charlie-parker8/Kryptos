@@ -19,7 +19,7 @@ router = APIRouter(tags=["leaderboard"])
 
 @router.get("/leaderboard", response_model=LeaderboardResponse)
 async def get_leaderboard(
-    limit: int = Query(default=100, ge=1, le=200),
+    limit: int = Query(default=100, ge=1, le=100),
     user: User = Depends(get_current_user),  # noqa: B008 — FastAPI's own DI idiom
     db: AsyncSession = Depends(get_session),  # noqa: B008 — FastAPI's own DI idiom
     redis_client: redis.Redis = Depends(get_redis),  # noqa: B008 — FastAPI's own DI idiom

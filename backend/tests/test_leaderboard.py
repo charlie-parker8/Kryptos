@@ -134,6 +134,14 @@ async def test_leaderboard_returns_your_row_when_outside_the_page(
 
 
 @pytest.mark.asyncio
+async def test_leaderboard_limit_is_capped_at_100(client: AsyncClient) -> None:
+    await _register(client)
+
+    assert (await client.get("/leaderboard?limit=100")).status_code == 200
+    assert (await client.get("/leaderboard?limit=101")).status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_empty_leaderboard_is_not_an_error(
     client: AsyncClient, redis_client: redis.Redis
 ) -> None:
