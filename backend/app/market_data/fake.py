@@ -15,6 +15,8 @@ from app.market_data.kraken import Candle, PairStatus, Ticker
 
 DEFAULT_TICKERS: dict[str, tuple[Decimal, Decimal, Decimal]] = {
     "BTC/USD": (Decimal("49995.00"), Decimal("50005.00"), Decimal("50000.00")),
+    "ETH/USD": (Decimal("2999.50"), Decimal("3000.50"), Decimal("3000.00")),
+    "SOL/USD": (Decimal("149.95"), Decimal("150.05"), Decimal("150.00")),
 }
 
 

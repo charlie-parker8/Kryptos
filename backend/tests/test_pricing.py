@@ -4,7 +4,7 @@ from decimal import Decimal
 import pytest
 
 from app.market_data.kraken import Ticker
-from app.market_data.pricing import StalePriceError, ensure_fresh, executable_price
+from app.market_data.pricing import StalePriceError, ensure_fresh, mark_price
 
 
 def _ticker(**overrides: object) -> Ticker:
@@ -19,14 +19,11 @@ def _ticker(**overrides: object) -> Ticker:
     return Ticker(**defaults)  # type: ignore[arg-type]
 
 
-def test_buy_executes_at_ask() -> None:
+def test_mark_price_is_last() -> None:
     ticker = _ticker()
-    assert executable_price(ticker, "buy") == ticker.ask
-
-
-def test_sell_executes_at_bid() -> None:
-    ticker = _ticker()
-    assert executable_price(ticker, "sell") == ticker.bid
+    assert mark_price(ticker) == ticker.last
+    assert mark_price(ticker) != ticker.bid
+    assert mark_price(ticker) != ticker.ask
 
 
 def test_ensure_fresh_accepts_quote_within_max_age() -> None:

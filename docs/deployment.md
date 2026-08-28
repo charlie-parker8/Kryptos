@@ -105,7 +105,8 @@ Set environment variables (Environment tab; mark the secrets as such):
 | `KRYPTOS_DATABASE_URL` | the `postgresql+asyncpg://…pooler.supabase.com:5432/postgres` string from step 2 |
 | `KRYPTOS_REDIS_URL` | the **Internal Key Value URL** (`redis://red-…:6379`) from step 3 |
 | `KRYPTOS_FRONTEND_ORIGIN` | `https://app.<domain>` |
-| `KRYPTOS_STARTING_CASH_BALANCE` | `100000.00` (optional) |
+| `KRYPTOS_STARTING_CASH_BALANCE` | `10000.00` (also pinned in `render.yaml`) |
+| `KRYPTOS_LEVERAGE_PRESETS` / `KRYPTOS_MAINTENANCE_MARGIN_RATE` / `KRYPTOS_MIN_COLLATERAL` | *(optional)* — code defaults `[2,5,10]` / `0.005` / `10.00`; see `docs/leverage-model.md` |
 | `KRYPTOS_ALLOWED_HOSTS` | *(optional)* `["api.<domain>","kryptos-api.onrender.com"]` — see Troubleshooting |
 
 Then: **Settings → Custom Domains → add `api.<domain>`**, and put the CNAME target it shows
@@ -113,6 +114,11 @@ into DNS (step 1). Render provisions TLS automatically.
 
 The container runs `alembic upgrade head` before `uvicorn` on every boot (see
 `backend/docker-entrypoint.sh`) — a failed migration fails the deploy, which is intended.
+This is a **greenfield deployment**: the single `0001_initial` migration builds the whole
+leveraged-position schema from an empty database. There is no prior spot data to preserve
+or migrate; if a database with the old spot schema exists, drop it (`DROP SCHEMA public
+CASCADE; CREATE SCHEMA public;`) before the first deploy, and `FLUSHDB` the Key Value
+store.
 
 ## 5. Vercel (SPA)
 
@@ -148,20 +154,25 @@ inactivity.
 
 Against `https://app.<domain>`:
 
-1. Register a new account → you land on the dashboard with live BTC/ETH/SOL prices.
+1. Register a new account → you land on the dashboard at **$10,000** equity with live
+   BTC/ETH/SOL prices.
 2. DevTools → Application → Cookies: `kryptos_session` is `Secure`, `HttpOnly`,
    `SameSite=Lax`, no `Domain` attribute, on `api.<domain>`.
 3. DevTools → Network → WS: the `wss://api.<domain>/ws` connection is `101 Switching
    Protocols` and receiving `price_tick` frames.
-4. Place a market buy → the position appears; net worth updates over the socket.
-5. Open `/leaderboard`, then reload the page (tests the SPA rewrite) — still works.
-6. Sign out → redirected to `/login`; revisiting `/` keeps you logged out.
+4. Open a 5× long on BTC/USD → the position card appears; equity and unrealized P&L update
+   over the socket. Close it → free cash returns.
+5. Open a 10× short with a small collateral and wait for an adverse move (or trigger it) →
+   a liquidation toast; the position shows `liquidated` in the blotter. Drive the account
+   to $0 equity → the bankruptcy modal; equity is restored to $10,000.
+6. Open `/leaderboard` (ranked by equity), then reload the page (tests the SPA rewrite).
+7. Sign out → redirected to `/login`; revisiting `/` keeps you logged out.
 
 `curl` checks:
 
 ```bash
 curl -si https://api.<domain>/health                     # 200, {"status":"ok",...}
-curl -si -X OPTIONS https://api.<domain>/orders \
+curl -si -X OPTIONS https://api.<domain>/positions \
   -H 'Origin: https://app.<domain>' \
   -H 'Access-Control-Request-Method: POST'                # ACAO echoes the origin, ACAC: true
 curl -si -X POST https://api.<domain>/auth/login \
@@ -187,8 +198,9 @@ no persistence. Supabase: 500 MB, 2 projects. Vercel Hobby: non-commercial use o
 
 **Cold starts.** With the keep-alive job running, the instance stays warm. If it lapses, the
 first request after 15 min idle takes ~30–60 s, and for the first few seconds after wake the
-Kraken stream hasn't refilled the price cache, so orders return `stale_price` (invariant 10)
-until it does — expected, self-heals in seconds.
+Kraken stream hasn't refilled the price cache, so opens/closes return `stale_price`
+(invariant 10) — and the liquidation engine is paused — until it does. Expected, self-heals
+in seconds.
 
 ## Troubleshooting
 

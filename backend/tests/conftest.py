@@ -1,4 +1,5 @@
 from collections.abc import AsyncIterator
+from decimal import Decimal
 
 import pytest
 import pytest_asyncio
@@ -24,7 +25,9 @@ TEST_DATABASE_URL = "postgresql+asyncpg://kryptos:kryptos@localhost:5432/kryptos
 @pytest.fixture(scope="session")
 def test_settings() -> Settings:
     return Settings(
-        database_url=TEST_DATABASE_URL, redis_url="redis://localhost:6379/1"
+        database_url=TEST_DATABASE_URL,
+        redis_url="redis://localhost:6379/1",
+        starting_cash_balance=Decimal("10000.00"),
     )
 
 
@@ -109,10 +112,10 @@ async def redis_client(test_settings: Settings) -> AsyncIterator[redis.Redis]:
 
 @pytest.fixture
 def fake_market_data(monkeypatch: pytest.MonkeyPatch) -> FakeMarketData:
-    """Patches the two live-provider entry points app.trading.execute_order actually calls
-    (app.market_data.cache.get_ticker on a cache miss, app.trading.get_pair_status —
-    pair-status is never cached this phase) with a FakeMarketData instance, following the
-    same patch-by-import-site convention as test_market_data_cache.py. FakeMarketData's own
+    """Patches the live-provider entry points position execution actually calls
+    (app.market_data.cache.get_ticker on a cache miss, app.positions.get_pair_status —
+    pair-status is never cached) with a FakeMarketData instance, following the same
+    patch-by-import-site convention as test_market_data_cache.py. FakeMarketData's own
     get_ticker/get_pair_status take only (self, pair) — no base_url/timeout/client — so
     these adapters absorb the extra kwargs the real functions accept.
     """
@@ -130,6 +133,6 @@ def fake_market_data(monkeypatch: pytest.MonkeyPatch) -> FakeMarketData:
         return await fake.get_ohlc(pair, interval)
 
     monkeypatch.setattr("app.market_data.cache.get_ticker", fake_get_ticker)
-    monkeypatch.setattr("app.trading.get_pair_status", fake_get_pair_status)
+    monkeypatch.setattr("app.positions.get_pair_status", fake_get_pair_status)
     monkeypatch.setattr("app.market_data.candles.get_ohlc", fake_get_ohlc)
     return fake

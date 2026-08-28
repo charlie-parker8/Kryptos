@@ -9,7 +9,14 @@
 export const PAIRS = ["BTC/USD", "ETH/USD", "SOL/USD"] as const;
 export type Pair = (typeof PAIRS)[number];
 
-/** Base asset as it appears in holdings/ledger rows, e.g. "BTC" (not the pair). */
+/** Leverage presets — mirrors `KRYPTOS_LEVERAGE_PRESETS` (backend config). */
+export const LEVERAGE_PRESETS = [2, 5, 10] as const;
+export type Leverage = (typeof LEVERAGE_PRESETS)[number];
+
+/** Minimum collateral per position, USD — mirrors `KRYPTOS_MIN_COLLATERAL`. */
+export const MIN_COLLATERAL = 10;
+
+/** Base asset as it appears in ledger rows, e.g. "BTC" (not the pair). */
 export type Asset = "BTC" | "ETH" | "SOL";
 
 /**
@@ -31,42 +38,75 @@ export interface PriceTick {
   broadcast_at: number;
 }
 
-export interface HoldingValuation {
-  /** base asset, e.g. "BTC" */
-  symbol: Asset;
-  quantity: string;
-  average_cost: string;
-  /** the pair's last price; null if never observed / provider down */
-  current_price: string | null;
-  /** current_price * quantity, 2dp; null when current_price is null */
-  market_value: string | null;
-  /** true when the price is older than the max age, or is null */
+export type PositionSide = "long" | "short";
+export type PositionStatus = "open" | "closed" | "liquidated";
+export type CloseReason = "user" | "liquidation" | "bankruptcy";
+
+/**
+ * One open position as the server values it (`GET /portfolio` and the `account_update` WS
+ * message). Mirrors `PositionValuation` (`backend/app/account.py`). Money is a decimal
+ * string; `mark_price` / `unrealized_pnl` / `position_equity` / `margin_ratio` are null
+ * only when no price has ever been observed for the pair.
+ */
+export interface PositionValuation {
+  id: string;
+  pair: Pair;
+  side: PositionSide;
+  leverage: number;
+  collateral: string;
+  size: string;
+  entry_price: string;
+  liquidation_price: string;
+  mark_price: string | null;
+  unrealized_pnl: string | null;
+  position_equity: string | null;
+  margin_ratio: string | null;
+  /** true when the mark is older than the max age, or has never been observed */
   stale: boolean;
 }
 
-export interface PortfolioSnapshot {
-  cash_balance: string;
-  holdings: HoldingValuation[];
-  net_worth: string;
+export interface AccountSnapshot {
+  free_cash: string;
+  equity: string;
+  total_unrealized_pnl: string;
+  positions: PositionValuation[];
   /** ISO 8601, UTC — server compute time */
   as_of: string;
 }
 
-export interface PortfolioUpdate extends PortfolioSnapshot {
-  type: "portfolio_update";
+export interface AccountUpdate extends AccountSnapshot {
+  type: "account_update";
 }
 
 /**
- * Sent once to a user's own connections when their net worth hit $0 and the account was
- * reset (backend `app/bankruptcy.py`). A `portfolio_update` with the restored balances
- * follows immediately after.
+ * Sent to a user's own connections when a position reaches a terminal state — a user
+ * close, an automatic liquidation, or a bankruptcy reset. Drives the blotter refresh and
+ * (for liquidations) a toast. An `account_update` with the new balances follows.
+ */
+export interface PositionUpdate {
+  type: "position_update";
+  position_id: string;
+  pair: Pair;
+  side: PositionSide;
+  status: "closed" | "liquidated";
+  close_price: string;
+  realized_pnl: string;
+  reason: CloseReason;
+  /** ISO 8601, UTC */
+  at: string;
+}
+
+/**
+ * Sent to a user's own connections when their account equity hit the floor and the account
+ * was reset (backend `app/bankruptcy.py`). A `position_update` per closed position and an
+ * `account_update` with the restored balance follow.
  */
 export interface BankruptcyReset {
   type: "bankruptcy_reset";
   /** the balance the account was restored to, decimal string */
   starting_cash_balance: string;
-  /** base assets whose positions were cleared, e.g. ["BTC", "ETH"] */
-  cleared_symbols: string[];
+  /** pairs whose positions were closed by the reset, e.g. ["BTC/USD", "ETH/USD"] */
+  closed_positions: string[];
   /** ISO 8601, UTC */
   reset_at: string;
 }
@@ -117,7 +157,8 @@ export interface CandleUpdate {
 
 export type RealtimeMessage =
   | PriceTick
-  | PortfolioUpdate
+  | AccountUpdate
+  | PositionUpdate
   | BankruptcyReset
   | CandleUpdate;
 

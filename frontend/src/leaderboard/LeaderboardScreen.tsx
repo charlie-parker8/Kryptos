@@ -12,7 +12,7 @@ export function LeaderboardScreen() {
           Leaderboard
         </h1>
         <p className="mt-2 text-sm text-muted">
-          Every account ranked by net worth
+          Every account ranked by equity
         </p>
       </header>
 
@@ -22,7 +22,7 @@ export function LeaderboardScreen() {
             <tr>
               <th className="text-left">#</th>
               <th className="text-left">Trader</th>
-              <th className="text-right">Net worth</th>
+              <th className="text-right">Equity</th>
               <th className="text-right">Move</th>
             </tr>
           </thead>
@@ -86,8 +86,14 @@ function StandingRow({ row }: { row: LeaderboardEntry }) {
           </span>
         ) : null}
       </td>
-      <td className="text-right font-mono text-fg-strong tnum">
-        {formatUsd(row.net_worth)}
+      <td
+        className={
+          Number(row.equity) < 0
+            ? "text-right font-mono text-down tnum"
+            : "text-right font-mono text-fg-strong tnum"
+        }
+      >
+        {formatUsd(row.equity)}
       </td>
       <td
         className={
