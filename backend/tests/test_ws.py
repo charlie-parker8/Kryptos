@@ -7,12 +7,12 @@ serialization — only the transport is faked.
 """
 
 import asyncio
-import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
 import redis.asyncio as redis
+from helpers import open_position, register, set_market_price
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -64,20 +64,8 @@ class FakeWebSocket:
         self._disconnect.set()
 
 
-def _headers(key: str | None = None) -> dict[str, str]:
-    return {"Idempotency-Key": key or str(uuid.uuid4())}
-
-
 async def _register(client: AsyncClient) -> dict[str, object]:
-    response = await client.post(
-        "/auth/register",
-        json={
-            "email": f"{uuid.uuid4()}@example.com",
-            "username": f"u{uuid.uuid4().hex[:12]}",
-            "password": "correct-horse-1",
-        },
-    )
-    return response.json()
+    return await register(client)
 
 
 def _session_cookie(client: AsyncClient) -> str:
@@ -114,7 +102,7 @@ async def test_ws_rejects_a_connection_with_a_bogus_session_cookie(
 
 
 @pytest.mark.asyncio
-async def test_ws_sends_an_initial_portfolio_update_on_connect(
+async def test_ws_sends_an_initial_account_update_on_connect(
     client: AsyncClient,
     redis_client: redis.Redis,
     session_factory: async_sessionmaker[AsyncSession],
@@ -130,24 +118,22 @@ async def test_ws_sends_an_initial_portfolio_update_on_connect(
     await task
 
     assert fake_ws.accepted is True
-    assert fake_ws.sent[0]["type"] == "portfolio_update"
-    assert Decimal(str(fake_ws.sent[0]["cash_balance"])) == Decimal(
+    assert fake_ws.sent[0]["type"] == "account_update"
+    assert Decimal(str(fake_ws.sent[0]["free_cash"])) == Decimal(
         str(user["cash_balance"])
     )
-    assert fake_ws.sent[0]["holdings"] == []
+    assert fake_ws.sent[0]["positions"] == []
 
 
 @pytest.mark.asyncio
-async def test_ws_receives_a_portfolio_update_after_an_order_fills(
+async def test_ws_receives_an_account_update_after_a_position_opens(
     client: AsyncClient,
     fake_market_data: FakeMarketData,
     redis_client: redis.Redis,
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     await _register(client)
-    fake_market_data.set_price(
-        "BTC/USD", bid=Decimal(50000), ask=Decimal(50000), last=Decimal(50000)
-    )
+    await set_market_price(fake_market_data, redis_client, "BTC/USD", "50000")
     fake_ws = FakeWebSocket(cookies={SESSION_COOKIE_NAME: _session_cookie(client)})
 
     task = asyncio.create_task(
@@ -156,20 +142,17 @@ async def test_ws_receives_a_portfolio_update_after_an_order_fills(
     await fake_ws.ready.wait()
     assert len(fake_ws.sent) == 1  # just the initial snapshot so far
 
-    await client.post(
-        "/orders",
-        json={"symbol": "BTC/USD", "side": "buy", "quantity": "0.1"},
-        headers=_headers(),
-    )
+    await open_position(client, pair="BTC/USD", side="long", collateral="1000")
 
     fake_ws.simulate_disconnect()
     await task
 
     assert len(fake_ws.sent) == 2
     pushed = fake_ws.sent[1]
-    assert pushed["type"] == "portfolio_update"
-    assert len(pushed["holdings"]) == 1
-    assert pushed["holdings"][0]["symbol"] == "BTC"
+    assert pushed["type"] == "account_update"
+    assert len(pushed["positions"]) == 1
+    assert pushed["positions"][0]["pair"] == "BTC/USD"
+    assert pushed["positions"][0]["side"] == "long"
 
 
 @pytest.mark.asyncio

@@ -1,6 +1,7 @@
+import { OpenPositions } from "@/dashboard/OpenPositions";
 import { PriceChart } from "./chart/PriceChart";
-import { OrderBlotter } from "./OrderBlotter";
-import { OrderTicket } from "./OrderTicket";
+import { PositionBlotter } from "./PositionBlotter";
+import { PositionTicket } from "./PositionTicket";
 
 export function TradeScreen() {
   return (
@@ -10,8 +11,9 @@ export function TradeScreen() {
           Trade
         </h1>
         <p className="mt-2 max-w-prose text-sm text-muted">
-          Market orders only. Buys fill at the ask, sells at the bid, both at the
-          price the server sees when it executes — never the number on screen.
+          Isolated-margin long/short. Commit collateral at a leverage preset; the
+          server marks, prices, and liquidates against the live Kraken price — never
+          the number on screen.
         </p>
       </header>
 
@@ -19,9 +21,12 @@ export function TradeScreen() {
 
       <div className="grid gap-8 lg:grid-cols-[20rem_1fr]">
         <div>
-          <OrderTicket />
+          <PositionTicket />
         </div>
-        <OrderBlotter />
+        <div className="space-y-8">
+          <OpenPositions />
+          <PositionBlotter />
+        </div>
       </div>
     </div>
   );

@@ -34,7 +34,15 @@ services:
       - key: KRYPTOS_DATABASE_SSL
         value: "true"
       - key: KRYPTOS_STARTING_CASH_BALANCE
-        value: "100000.00"
+        value: "10000.00"
+      # Leverage model. Defaults in app/config.py match these; set here only to make the
+      # knobs visible/overridable in the dashboard.
+      - key: KRYPTOS_LEVERAGE_PRESETS
+        value: "[2, 5, 10]"
+      - key: KRYPTOS_MAINTENANCE_MARGIN_RATE
+        value: "0.005"
+      - key: KRYPTOS_MIN_COLLATERAL
+        value: "10.00"
       # Private-network URL of the Key Value store above (redis://…, no TLS). Render
       # fills this in automatically — do not set it by hand.
       - key: KRYPTOS_REDIS_URL

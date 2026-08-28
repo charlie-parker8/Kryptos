@@ -1,8 +1,8 @@
 """In-process WebSocket connection registry and fan-out. Per CLAUDE.md, the MVP uses in-process
 fan-out — not Redis Pub/Sub — since WebSocket delivery is still the same process as everything
 else; a module-level singleton (mirroring app.redis_client's pattern) so app.price_stream (price
-tick fan-out) and app.routers.orders (post-fill portfolio push) can both reach the same
-connections app.routers.ws registers, without importing from each other.
+tick fan-out, liquidation notifications) and app.routers.positions (post-open/close account push)
+can both reach the same connections app.routers.ws registers, without importing from each other.
 """
 
 import logging
@@ -11,9 +11,10 @@ import uuid
 from fastapi import WebSocket
 
 from app.ws_messages import (
+    AccountUpdateMessage,
     BankruptcyResetMessage,
     CandleUpdateMessage,
-    PortfolioUpdateMessage,
+    PositionUpdateMessage,
     PriceTickMessage,
 )
 
@@ -40,37 +41,40 @@ class ConnectionManager:
 
     async def broadcast_price_tick(self, message: PriceTickMessage) -> None:
         """Prices aren't per-user — every connected client gets every tick."""
-        payload = message.model_dump(mode="json")
-        for user_id, connections in list(self._by_user.items()):
-            for websocket in list(connections):
-                await self._send_or_disconnect(user_id, websocket, payload)
+        await self._broadcast(message.model_dump(mode="json"))
 
     async def broadcast_candle_update(self, message: CandleUpdateMessage) -> None:
         """Candles aren't per-user — every connected client gets every update and keeps
         only the pair+interval its chart shows (mirrors broadcast_price_tick).
         """
-        payload = message.model_dump(mode="json")
-        for user_id, connections in list(self._by_user.items()):
-            for websocket in list(connections):
-                await self._send_or_disconnect(user_id, websocket, payload)
+        await self._broadcast(message.model_dump(mode="json"))
 
-    async def send_portfolio_update(
-        self, user_id: uuid.UUID, message: PortfolioUpdateMessage
+    async def send_account_update(
+        self, user_id: uuid.UUID, message: AccountUpdateMessage
     ) -> None:
-        connections = self._by_user.get(user_id)
-        if not connections:
-            return
-        payload = message.model_dump(mode="json")
-        for websocket in list(connections):
-            await self._send_or_disconnect(user_id, websocket, payload)
+        await self._send_to_user(user_id, message.model_dump(mode="json"))
+
+    async def send_position_update(
+        self, user_id: uuid.UUID, message: PositionUpdateMessage
+    ) -> None:
+        await self._send_to_user(user_id, message.model_dump(mode="json"))
 
     async def send_bankruptcy_reset(
         self, user_id: uuid.UUID, message: BankruptcyResetMessage
     ) -> None:
+        await self._send_to_user(user_id, message.model_dump(mode="json"))
+
+    async def _broadcast(self, payload: dict[str, object]) -> None:
+        for user_id, connections in list(self._by_user.items()):
+            for websocket in list(connections):
+                await self._send_or_disconnect(user_id, websocket, payload)
+
+    async def _send_to_user(
+        self, user_id: uuid.UUID, payload: dict[str, object]
+    ) -> None:
         connections = self._by_user.get(user_id)
         if not connections:
             return
-        payload = message.model_dump(mode="json")
         for websocket in list(connections):
             await self._send_or_disconnect(user_id, websocket, payload)
 

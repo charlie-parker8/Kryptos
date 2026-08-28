@@ -1,10 +1,11 @@
 import asyncio
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
 import redis.asyncio as redis
+from helpers import STARTING_CASH, open_position, register, set_market_price
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -14,10 +15,10 @@ from app.config import Settings
 from app.market_data.cache import set_cached_ticker
 from app.market_data.fake import FakeMarketData
 from app.market_data.kraken import Ticker
-from app.models import Holding, LedgerEntry, Order, User
+from app.models import LedgerEntry, Position, User
 from app.ws_manager import ws_manager
 
-_START = Decimal("100000.00")
+pytestmark = pytest.mark.usefixtures("fake_market_data")
 
 
 class _RecordingWS:
@@ -28,55 +29,28 @@ class _RecordingWS:
         self.sent.append(payload)
 
 
-def _headers() -> dict[str, str]:
-    return {"Idempotency-Key": str(uuid.uuid4())}
-
-
-async def _register(client: AsyncClient) -> dict[str, object]:
-    response = await client.post(
-        "/auth/register",
-        json={
-            "email": f"{uuid.uuid4()}@example.com",
-            "username": f"u{uuid.uuid4().hex[:12]}",
-            "password": "correct-horse-1",
-        },
-    )
-    assert response.status_code == 201
-    return response.json()
-
-
-async def _go_all_in_then_crash_price(
+async def _open_max_long_then_crash(
     client: AsyncClient,
     redis_client: redis.Redis,
     fake_market_data: FakeMarketData,
     *,
+    crash_to: str = "24000",
     stale: bool = False,
 ) -> uuid.UUID:
-    """Register a user, spend the entire balance on 1 BTC at $100k, then move the cached
-    price to ~$0 so net worth rounds to $0. Returns the user id.
+    """Register, put the whole $10k into a 2x BTC long at $50k, then move the cached price
+    to `crash_to` so the position's loss exceeds its collateral. Returns the user id.
     """
-    user = await _register(client)
-    fake_market_data.set_price(
-        "BTC/USD", bid=_START, ask=_START, last=_START
+    user = await register(client)
+    await set_market_price(fake_market_data, redis_client, "BTC/USD", "50000")
+    opened = await open_position(
+        client, pair="BTC/USD", side="long", collateral="10000", leverage=2
     )
-    fill = await client.post(
-        "/orders",
-        json={"symbol": "BTC/USD", "side": "buy", "quantity": "1"},
-        headers=_headers(),
-    )
-    assert fill.json()["status"] == "filled"
+    assert opened.status_code == 201, opened.text
 
-    as_of = datetime.now(UTC)
-    if stale:
-        as_of -= timedelta(seconds=60)
-    crash = Ticker(
-        pair="BTC/USD",
-        bid=Decimal("0.001"),
-        ask=Decimal("0.001"),
-        last=Decimal("0.001"),
-        as_of=as_of,
+    age = 60.0 if stale else 0.0
+    await set_market_price(
+        fake_market_data, redis_client, "BTC/USD", crash_to, age_seconds=age
     )
-    await set_cached_ticker(redis_client, crash, ttl_seconds=120)
     return uuid.UUID(str(user["id"]))
 
 
@@ -87,7 +61,7 @@ async def test_solvent_account_is_never_reset(
     test_settings: Settings,
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
-    user = await _register(client)
+    user = await register(client)
     uid = uuid.UUID(str(user["id"]))
 
     async with session_factory() as db:
@@ -99,20 +73,18 @@ async def test_solvent_account_is_never_reset(
     async with session_factory() as db:
         refreshed = await db.get(User, uid)
         assert refreshed is not None
-        assert refreshed.cash_balance == _START
+        assert refreshed.cash_balance == STARTING_CASH
 
 
 @pytest.mark.asyncio
-async def test_bankrupt_account_is_reset_and_history_preserved(
+async def test_wiped_out_account_is_reset_and_history_preserved(
     client: AsyncClient,
     redis_client: redis.Redis,
     test_settings: Settings,
     fake_market_data: FakeMarketData,
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
-    uid = await _go_all_in_then_crash_price(
-        client, redis_client, fake_market_data
-    )
+    uid = await _open_max_long_then_crash(client, redis_client, fake_market_data)
 
     async with session_factory() as db:
         reset = await bankruptcy.maybe_reset_bankrupt_account(
@@ -120,27 +92,22 @@ async def test_bankrupt_account_is_reset_and_history_preserved(
         )
 
     assert reset is not None
-    assert reset.cleared_symbols == ["BTC"]
-    assert reset.starting_cash_balance == _START
+    assert [c.pair for c in reset.closed] == ["BTC/USD"]
+    assert reset.starting_cash_balance == STARTING_CASH
 
     async with session_factory() as db:
         user = await db.get(User, uid)
         assert user is not None
-        assert user.cash_balance == _START  # invariant 12: starting cash restored
+        assert user.cash_balance == STARTING_CASH
 
-        holdings = (
-            (await db.execute(select(Holding).where(Holding.user_id == uid)))
+        positions = (
+            (await db.execute(select(Position).where(Position.user_id == uid)))
             .scalars()
             .all()
         )
-        assert all(h.quantity == 0 for h in holdings)  # active holdings cleared
-
-        orders = (
-            (await db.execute(select(Order).where(Order.user_id == uid)))
-            .scalars()
-            .all()
-        )
-        assert len(orders) == 1  # the buy is preserved
+        assert len(positions) == 1  # the position is preserved, just closed
+        assert positions[0].status == "closed"
+        assert positions[0].close_reason == "bankruptcy"
 
         ledger = (
             (
@@ -153,14 +120,12 @@ async def test_bankrupt_account_is_reset_and_history_preserved(
             .scalars()
             .all()
         )
-        assert [entry.entry_type for entry in ledger] == [
-            "order_buy",
+        assert [e.entry_type for e in ledger] == [
+            "position_open",
             "bankruptcy_reset",
         ]
-        reset_entry = ledger[-1]
-        assert reset_entry.cash_balance_after == _START
-        assert reset_entry.cash_delta == _START  # 0 -> 100000
-        assert reset_entry.order_id is None
+        assert ledger[-1].cash_balance_after == STARTING_CASH
+        assert ledger[-1].position_id is None
 
 
 @pytest.mark.asyncio
@@ -171,7 +136,7 @@ async def test_stale_price_blocks_the_reset_then_fresh_price_allows_it(
     fake_market_data: FakeMarketData,
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
-    uid = await _go_all_in_then_crash_price(
+    uid = await _open_max_long_then_crash(
         client, redis_client, fake_market_data, stale=True
     )
 
@@ -179,22 +144,19 @@ async def test_stale_price_blocks_the_reset_then_fresh_price_allows_it(
         blocked = await bankruptcy.maybe_reset_bankrupt_account(
             db, redis_client, test_settings, user_id=uid
         )
-    assert blocked is None  # invariant 10: a stale price must not drive a reset
+    assert blocked is None  # invariant 10
 
-    async with session_factory() as db:
-        still_bankrupt = await db.get(User, uid)
-        assert still_bankrupt is not None
-        assert still_bankrupt.cash_balance == Decimal("0.00")
-
-    # Same crash price, now fresh.
-    fresh = Ticker(
-        pair="BTC/USD",
-        bid=Decimal("0.001"),
-        ask=Decimal("0.001"),
-        last=Decimal("0.001"),
-        as_of=datetime.now(UTC),
+    await set_cached_ticker(
+        redis_client,
+        Ticker(
+            pair="BTC/USD",
+            bid=Decimal(24000),
+            ask=Decimal(24000),
+            last=Decimal(24000),
+            as_of=datetime.now(UTC),
+        ),
+        ttl_seconds=120,
     )
-    await set_cached_ticker(redis_client, fresh, ttl_seconds=120)
 
     async with session_factory() as db:
         allowed = await bankruptcy.maybe_reset_bankrupt_account(
@@ -211,9 +173,7 @@ async def test_overlapping_checks_reset_exactly_once(
     fake_market_data: FakeMarketData,
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
-    uid = await _go_all_in_then_crash_price(
-        client, redis_client, fake_market_data
-    )
+    uid = await _open_max_long_then_crash(client, redis_client, fake_market_data)
 
     async def check() -> object:
         async with session_factory() as db:
@@ -240,35 +200,27 @@ async def test_overlapping_checks_reset_exactly_once(
         assert len(resets) == 1
         user = await db.get(User, uid)
         assert user is not None
-        assert user.cash_balance == _START  # invariant 1: never negative
+        assert user.cash_balance == STARTING_CASH
 
 
 @pytest.mark.asyncio
-async def test_price_tick_resets_a_connected_bankrupt_holder_and_notifies(
+async def test_a_gap_down_tick_liquidates_and_then_resets_the_holder(
     client: AsyncClient,
     redis_client: redis.Redis,
     test_settings: Settings,
     fake_market_data: FakeMarketData,
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
-    user = await _register(client)
-    uid = uuid.UUID(str(user["id"]))
-    fake_market_data.set_price("BTC/USD", bid=_START, ask=_START, last=_START)
-    fill = await client.post(
-        "/orders",
-        json={"symbol": "BTC/USD", "side": "buy", "quantity": "1"},
-        headers=_headers(),
-    )
-    assert fill.json()["status"] == "filled"
+    uid = await _open_max_long_then_crash(client, redis_client, fake_market_data)
 
     fake_ws = _RecordingWS()
     ws_manager.connect(uid, fake_ws)  # type: ignore[arg-type]
     try:
         crash_tick = Ticker(
             pair="BTC/USD",
-            bid=Decimal("0.001"),
-            ask=Decimal("0.001"),
-            last=Decimal("0.001"),
+            bid=Decimal(24000),
+            ask=Decimal(24000),
+            last=Decimal(24000),
             as_of=datetime.now(UTC),
         )
         await price_stream.handle_tick(
@@ -279,14 +231,16 @@ async def test_price_tick_resets_a_connected_bankrupt_holder_and_notifies(
 
     types = [m["type"] for m in fake_ws.sent]
     assert "price_tick" in types
+    assert "position_update" in types
     assert "bankruptcy_reset" in types
 
-    final_portfolio = [
-        m for m in fake_ws.sent if m["type"] == "portfolio_update"
-    ][-1]
-    assert Decimal(str(final_portfolio["cash_balance"])) == _START
-
     async with session_factory() as db:
-        refreshed = await db.get(User, uid)
-        assert refreshed is not None
-        assert refreshed.cash_balance == _START
+        user = await db.get(User, uid)
+        assert user is not None
+        assert user.cash_balance == STARTING_CASH
+        position = (
+            await db.execute(select(Position).where(Position.user_id == uid))
+        ).scalar_one()
+        # The tick liquidated it; the reset then reclassified nothing (already terminal).
+        assert position.status == "liquidated"
+        assert position.close_reason == "liquidation"

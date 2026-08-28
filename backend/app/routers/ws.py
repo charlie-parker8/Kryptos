@@ -1,8 +1,9 @@
 """The one authenticated WebSocket endpoint (per CLAUDE.md: in-process fan-out, no client-server
-protocol beyond connect/disconnect — server-push only). Pushes `price_tick` (broadcast to every
-connection, from app.price_stream) and `portfolio_update` (to one user's own connections, sent
-once on connect here and again from app.routers.orders after a fill) — see app.ws_messages for
-the schemas and app.ws_manager for the connection registry.
+protocol beyond connect/disconnect — server-push only). Pushes `price_tick` / `candle_update`
+(broadcast to every connection, from app.price_stream / app.candle_stream) and per-user
+`account_update` / `position_update` / `bankruptcy_reset` (sent once on connect here and again
+from app.routers.positions and app.price_stream) — see app.ws_messages for the schemas and
+app.ws_manager for the connection registry.
 """
 
 import logging
@@ -12,13 +13,13 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app import bankruptcy
+from app.account import get_account_snapshot
 from app.config import get_settings
 from app.db import get_session_factory
 from app.deps import SESSION_COOKIE_NAME, load_user_by_session_token
-from app.portfolio import get_portfolio_snapshot
 from app.redis_client import get_redis
 from app.ws_manager import ws_manager
-from app.ws_messages import PortfolioUpdateMessage
+from app.ws_messages import AccountUpdateMessage
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["ws"])
@@ -60,18 +61,15 @@ async def portfolio_ws(
     ws_manager.connect(user.id, websocket)
     try:
         async with session_factory() as db:
-            snapshot = await get_portfolio_snapshot(
-                db, redis_client, get_settings(), user
-            )
+            settings = get_settings()
+            snapshot = await get_account_snapshot(db, redis_client, settings, user)
             await websocket.send_json(
-                PortfolioUpdateMessage(**snapshot.model_dump()).model_dump(mode="json")
+                AccountUpdateMessage(**snapshot.model_dump()).model_dump(mode="json")
             )
-            # Catch an account that went bankrupt while it was disconnected. Runs after the
+            # Catch an account that was wiped out while it was disconnected. Runs after the
             # first snapshot so the client sees its real state, then the reset moment.
-            if snapshot.net_worth <= 0:
-                await bankruptcy.check_and_broadcast(
-                    db, redis_client, get_settings(), user
-                )
+            if snapshot.equity <= settings.bankruptcy_equity_floor:
+                await bankruptcy.check_and_broadcast(db, redis_client, settings, user)
         while True:
             # No client->server protocol this phase; this only waits for a disconnect.
             # receive() returns the raw ASGI message rather than raising — Starlette only

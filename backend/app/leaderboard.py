@@ -1,15 +1,17 @@
-"""Redis-backed leaderboard, ranked by net worth.
+"""Redis-backed leaderboard, ranked by account equity.
 
 Per CLAUDE.md, Redis holds no authoritative state: the sorted set here caches each account's
-derived net worth and is fully rebuildable from PostgreSQL cash/holdings plus the latest
-cached prices (see `rebuild`). Losing it costs freshness, never records. Scores are stored
-as **integer cents** — float64 represents integers exactly up to 2^53, so ranking stays
-exact without a Decimal round-trip.
+derived equity and is fully rebuildable from PostgreSQL (free cash + open positions) plus
+the latest cached prices (see `rebuild`). Losing it costs freshness, never records. Scores
+are stored as **integer cents** — float64 represents integers exactly up to 2^53, so
+ranking stays exact without a Decimal round-trip. Equity can be negative (a gap move past a
+liquidation price); the sorted set orders negatives correctly and the reset backstop catches
+them.
 
-`update_score` is called wherever a fresh net worth is already computed (registration, an
-order fill, a per-tick portfolio push, a bankruptcy reset); `run_leaderboard_refresh` is a
-background task that periodically rebuilds the whole set so disconnected accounts don't go
-stale and an empty Redis self-heals.
+`update_score` is called wherever a fresh equity is already computed (registration, an open
+or close, a per-tick account push, a liquidation, a bankruptcy reset); `run_leaderboard_refresh`
+periodically rebuilds the whole set so disconnected accounts don't go stale and an empty
+Redis self-heals.
 """
 
 import asyncio
@@ -24,14 +26,15 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app import position_index
+from app.account import get_account_snapshot
 from app.config import Settings
 from app.db import AsyncSessionLocal
 from app.models import User
-from app.portfolio import get_portfolio_snapshot
 
 logger = logging.getLogger(__name__)
 
-ZSET_KEY = "leaderboard:networth"
+ZSET_KEY = "leaderboard:equity"
 PREV_RANKS_KEY = "leaderboard:prev_ranks"
 _REFRESH_INTERVAL_SECONDS = 30.0
 
@@ -39,7 +42,7 @@ _REFRESH_INTERVAL_SECONDS = 30.0
 class LeaderboardEntry(BaseModel):
     rank: int
     username: str
-    net_worth: Decimal
+    equity: Decimal
     move: int  # previous rank minus current rank: positive = climbed, 0 = new/unchanged
     is_you: bool
 
@@ -50,8 +53,8 @@ class LeaderboardResponse(BaseModel):
     as_of: datetime
 
 
-def _to_cents(net_worth: Decimal) -> int:
-    return int((net_worth * 100).to_integral_value())
+def _to_cents(equity: Decimal) -> int:
+    return int((equity * 100).to_integral_value())
 
 
 def _decode(value: bytes | str) -> str:
@@ -59,13 +62,13 @@ def _decode(value: bytes | str) -> str:
 
 
 async def update_score(
-    redis_client: redis.Redis, user_id: uuid.UUID, net_worth: Decimal
+    redis_client: redis.Redis, user_id: uuid.UUID, equity: Decimal
 ) -> None:
     """Best-effort. The leaderboard is non-authoritative, so a Redis failure here must never
     break the caller — the periodic rebuild reconciles.
     """
     try:
-        await redis_client.zadd(ZSET_KEY, {str(user_id): _to_cents(net_worth)})
+        await redis_client.zadd(ZSET_KEY, {str(user_id): _to_cents(equity)})
     except redis.RedisError:
         logger.warning(
             "leaderboard update_score failed for %s", user_id, exc_info=True
@@ -79,7 +82,7 @@ async def get_board(
     limit: int,
     viewer_id: uuid.UUID,
 ) -> LeaderboardResponse:
-    """Top `limit` accounts by net worth, plus the viewer's own row when they rank below the
+    """Top `limit` accounts by equity, plus the viewer's own row when they rank below the
     page. `move` compares each rank against the previous-rank snapshot the last rebuild took.
     """
     top: list[tuple[bytes, float]] = cast(
@@ -110,7 +113,7 @@ async def get_board(
         return LeaderboardEntry(
             rank=rank,
             username=usernames.get(uid, "unknown"),
-            net_worth=Decimal(int(score)) / 100,
+            equity=Decimal(int(score)) / 100,
             move=prev_ranks.get(str(uid), rank) - rank,
             is_you=uid == viewer_id,
         )
@@ -132,10 +135,13 @@ async def get_board(
 async def rebuild(
     db: AsyncSession, redis_client: redis.Redis, settings: Settings
 ) -> int:
-    """Recompute every account's net worth from PostgreSQL + cached prices and rewrite the
-    sorted set. Snapshots the pre-rebuild ranks into `PREV_RANKS_KEY` first so `move`
-    reflects change across the interval. Returns the account count.
+    """Recompute every account's equity from PostgreSQL + cached prices and rewrite the
+    sorted set, and reconcile the open-position index. Snapshots the pre-rebuild ranks into
+    `PREV_RANKS_KEY` first so `move` reflects change across the interval. Returns the
+    account count.
     """
+    await position_index.reconcile(db, redis_client, settings.supported_pairs)
+
     current: list[bytes] = cast(
         "list[bytes]", await redis_client.zrevrange(ZSET_KEY, 0, -1)
     )
@@ -152,8 +158,8 @@ async def rebuild(
 
     scores: dict[str, int] = {}
     for user in users:
-        snapshot = await get_portfolio_snapshot(db, redis_client, settings, user)
-        scores[str(user.id)] = _to_cents(snapshot.net_worth)
+        snapshot = await get_account_snapshot(db, redis_client, settings, user)
+        scores[str(user.id)] = _to_cents(snapshot.equity)
 
     await redis_client.delete(ZSET_KEY)
     await redis_client.zadd(ZSET_KEY, scores)

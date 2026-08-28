@@ -34,9 +34,23 @@ class Settings(BaseSettings):
     # fine for local dev; set KRYPTOS_ALLOWED_HOSTS='["api.<domain>"]' in the hosted env.
     allowed_hosts: list[str] = Field(default_factory=lambda: ["*"])
 
-    starting_cash_balance: Decimal = Decimal("100000.00")
+    starting_cash_balance: Decimal = Decimal("10000.00")
     price_max_age_seconds: int = 10
     session_ttl_seconds: int = 60 * 60 * 24 * 7  # 7 days
+
+    # Leveraged-position model. Collateral is committed from cash_balance (free cash) at
+    # open; a position is liquidated when its equity (collateral + unrealized P&L) falls to
+    # maintenance_margin_rate * notional. Entry/mark/exit/liquidation all price off the
+    # Kraken `last` price. No trading fee in the MVP, but the knob stays so it can be turned
+    # on without a schema change.
+    leverage_presets: list[int] = Field(default_factory=lambda: [2, 5, 10])
+    maintenance_margin_rate: Decimal = Decimal("0.005")
+    min_collateral: Decimal = Decimal("10.00")
+    taker_fee_bps: int = 0
+    # Account is reset (positions closed, cash restored to starting balance) when equity
+    # falls to or below this floor. Clean isolated-margin liquidations leave ~mmr*notional
+    # behind, so equity crosses 0 mainly on gap moves between ticks.
+    bankruptcy_equity_floor: Decimal = Decimal("0.00")
 
     kraken_rest_base_url: str = "https://api.kraken.com"
     kraken_ws_url: str = "wss://ws.kraken.com/v2"

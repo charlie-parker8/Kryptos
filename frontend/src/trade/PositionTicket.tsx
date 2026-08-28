@@ -1,71 +1,78 @@
 import { type FormEvent, useRef, useState } from "react";
 
 import { ApiError, apiPost } from "@/core/api/client";
-import type { Order, OrderSide, RejectionReason } from "@/core/api/types";
-import { refreshOrders } from "@/core/hooks/useOrders";
-import { refreshPortfolio } from "@/core/hooks/usePortfolio";
+import type { Position } from "@/core/api/types";
+import { refreshAccount } from "@/core/hooks/useAccount";
+import { refreshPositions } from "@/core/hooks/usePositions";
 import { ASSET_NAME, ASSET_OF } from "@/core/lib/format";
-import { DECIMAL_RE, estimateNotional, formatQty, formatUsd } from "@/core/lib/money";
+import {
+  DECIMAL_RE,
+  formatUsd,
+  notionalOf,
+  previewLiquidationPrice,
+  sizeOf,
+} from "@/core/lib/money";
 import { isStale } from "@/core/lib/staleness";
 import { StaleBadge } from "@/core/primitives/StaleBadge";
-import { PAIRS, type Pair } from "@/core/realtime/types";
+import {
+  LEVERAGE_PRESETS,
+  type Leverage,
+  MIN_COLLATERAL,
+  PAIRS,
+  type Pair,
+  type PositionSide,
+} from "@/core/realtime/types";
 import {
   setChartPair,
   useChartSettingsStore,
 } from "@/core/state/chartSettingsStore";
-import { useCash, useHolding, useTick } from "@/core/state/selectors";
+import { useFreeCash, usePositionOnPair, useTick } from "@/core/state/selectors";
 
 type Result =
-  | { kind: "filled"; order: Order }
-  | { kind: "rejected"; order: Order }
+  | { kind: "opened"; position: Position }
+  | { kind: "rejected"; reason: string }
   | { kind: "unavailable" }
   | { kind: "error"; message: string };
 
-const REJECTION_COPY: Record<RejectionReason, string> = {
-  insufficient_funds: "Not enough cash for that order.",
-  insufficient_holdings: "You don't hold enough to sell that much.",
-  stale_price: "The price went stale before this could fill. Try again in a moment.",
-  pair_not_tradable: "This pair isn't tradable right now.",
-};
-
-function validQuantity(raw: string): boolean {
+function validCollateral(raw: string): boolean {
   if (!DECIMAL_RE.test(raw)) return false;
-  if (Number(raw) <= 0) return false;
-  const dp = raw.split(".")[1]?.length ?? 0;
-  return dp <= 10;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < MIN_COLLATERAL) return false;
+  return (raw.split(".")[1]?.length ?? 0) <= 2;
 }
 
-export function OrderTicket() {
+export function PositionTicket() {
   // Pair is shared with the chart (and persisted) so the two panels stay in lock-step.
   const pair = useChartSettingsStore((s) => s.pair);
-  const [side, setSide] = useState<OrderSide>("buy");
-  const [quantity, setQuantity] = useState("");
+  const [side, setSide] = useState<PositionSide>("long");
+  const [leverage, setLeverage] = useState<Leverage>(LEVERAGE_PRESETS[0]);
+  const [collateral, setCollateral] = useState("");
   const [result, setResult] = useState<Result | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // One idempotency key per order intent: minted on submit, kept across a 503 retry,
-  // cleared once the order resolves or the ticket changes.
+  // One idempotency key per open intent: minted on submit, kept across a 503 retry,
+  // cleared once the request resolves or the ticket changes.
   const idempotencyKey = useRef<string | null>(null);
 
   const tick = useTick(pair);
-  const cash = useCash();
+  const freeCash = useFreeCash();
   const asset = ASSET_OF[pair];
-  const holding = useHolding(asset);
+  const existing = usePositionOnPair(pair);
 
-  const price = tick ? (side === "buy" ? tick.ask : tick.bid) : undefined;
+  const mark = tick?.last;
   const stale = tick ? isStale(tick.as_of) : false;
-  const estimate =
-    price && validQuantity(quantity) ? estimateNotional(price, quantity) : null;
 
-  const heldQty = holding?.quantity ?? "0";
+  const notional =
+    validCollateral(collateral) ? notionalOf(collateral, leverage) : null;
+  const size = notional && mark ? sizeOf(notional, mark) : null;
+  const liq = mark ? previewLiquidationPrice(side, mark, leverage) : null;
+
   const overspend =
-    side === "buy" && estimate !== null && cash !== undefined
-      ? Number(estimate) > Number(cash)
+    validCollateral(collateral) && freeCash !== undefined
+      ? Number(collateral) > Number(freeCash)
       : false;
-  const oversell =
-    side === "sell" && validQuantity(quantity)
-      ? Number(quantity) > Number(heldQty)
-      : false;
+  const blocked =
+    !validCollateral(collateral) || overspend || existing !== undefined;
 
   function resetIntent() {
     idempotencyKey.current = null;
@@ -73,35 +80,35 @@ export function OrderTicket() {
   }
 
   async function submit() {
-    if (!validQuantity(quantity)) return;
+    if (blocked) return;
     const key = (idempotencyKey.current ??= crypto.randomUUID());
     setSubmitting(true);
     setResult(null);
     try {
-      const order = await apiPost<Order>(
-        "/orders",
-        { symbol: pair, side, quantity },
+      const position = await apiPost<Position>(
+        "/positions",
+        { pair, side, collateral, leverage },
         { "Idempotency-Key": key },
       );
       idempotencyKey.current = null;
-      setResult(
-        order.status === "filled"
-          ? { kind: "filled", order }
-          : { kind: "rejected", order },
-      );
-      refreshOrders();
-      refreshPortfolio();
-      if (order.status === "filled") setQuantity("");
+      setResult({ kind: "opened", position });
+      setCollateral("");
+      refreshPositions();
+      refreshAccount();
     } catch (err) {
       if (err instanceof ApiError && err.status === 503) {
         setResult({ kind: "unavailable" }); // keep the key — Retry reuses it
       } else if (err instanceof ApiError && err.status === 401) {
         setResult({ kind: "error", message: "Your session expired. Sign in again." });
-      } else {
+      } else if (err instanceof ApiError && isRejection(err)) {
+        idempotencyKey.current = null;
         setResult({
-          kind: "error",
-          message: "Couldn't place the order. Try again.",
+          kind: "rejected",
+          reason: err.detail ?? "That order was rejected.",
         });
+      } else {
+        idempotencyKey.current = null;
+        setResult({ kind: "error", message: "Couldn't open the position. Try again." });
       }
     } finally {
       setSubmitting(false);
@@ -113,15 +120,13 @@ export function OrderTicket() {
     void submit();
   }
 
-  const blocked = !validQuantity(quantity) || overspend || oversell;
-
   return (
     <form
       onSubmit={onSubmit}
       className="space-y-4 border border-border bg-surface p-4"
     >
       <div className="grid grid-cols-2 gap-2">
-        {(["buy", "sell"] as const).map((s) => (
+        {(["long", "short"] as const).map((s) => (
           <button
             key={s}
             type="button"
@@ -131,7 +136,7 @@ export function OrderTicket() {
             }}
             className={
               side === s
-                ? s === "buy"
+                ? s === "long"
                   ? "rounded-control border border-up bg-up/10 py-2 text-sm font-semibold uppercase tracking-wide text-up"
                   : "rounded-control border border-down bg-down/10 py-2 text-sm font-semibold uppercase tracking-wide text-down"
                 : "rounded-control border border-border py-2 text-sm font-medium uppercase tracking-wide text-muted transition-colors hover:text-fg"
@@ -162,78 +167,92 @@ export function OrderTicket() {
         </select>
       </label>
 
+      <div>
+        <span className="mb-1 block text-[0.6875rem] font-medium uppercase tracking-[0.1em] text-muted">
+          Leverage
+        </span>
+        <div className="grid grid-cols-3 gap-2">
+          {LEVERAGE_PRESETS.map((lev) => (
+            <button
+              key={lev}
+              type="button"
+              onClick={() => {
+                setLeverage(lev);
+                resetIntent();
+              }}
+              className={
+                leverage === lev
+                  ? "rounded-control border border-accent bg-accent/10 py-2 font-mono text-sm font-semibold text-accent"
+                  : "rounded-control border border-border py-2 font-mono text-sm text-muted transition-colors hover:text-fg"
+              }
+            >
+              {lev}×
+            </button>
+          ))}
+        </div>
+      </div>
+
       <label className="block">
         <span className="mb-1 block text-[0.6875rem] font-medium uppercase tracking-[0.1em] text-muted">
-          Quantity ({asset})
+          Collateral (USD)
         </span>
         <input
           inputMode="decimal"
           autoComplete="off"
           placeholder="0.00"
-          value={quantity}
+          value={collateral}
           onChange={(e) => {
-            setQuantity(e.target.value.trim());
+            setCollateral(e.target.value.trim());
             resetIntent();
           }}
           className="w-full rounded-control border border-border bg-bg px-3 py-2 font-mono text-sm text-fg-strong outline-none placeholder:text-muted focus:border-accent"
         />
-        {side === "sell" ? (
-          Number(heldQty) > 0 ? (
-            <button
-              type="button"
-              onClick={() => {
-                setQuantity(heldQty);
-                resetIntent();
-              }}
-              className="mt-1 font-mono text-[0.6875rem] text-muted hover:text-accent"
-            >
-              Hold {formatQty(heldQty, 10)} {asset} — sell all
-            </button>
-          ) : (
-            <p className="mt-1 font-mono text-[0.6875rem] text-muted">
-              No {asset} to sell.
-            </p>
-          )
+        {freeCash !== undefined ? (
+          <button
+            type="button"
+            onClick={() => {
+              setCollateral(freeCash);
+              resetIntent();
+            }}
+            className="mt-1 font-mono text-[0.6875rem] text-muted hover:text-accent"
+          >
+            Free cash {formatUsd(freeCash)} — use all
+          </button>
         ) : null}
       </label>
 
       <dl className="space-y-1.5 border-t border-hairline pt-3 font-mono text-xs">
         <div className="flex justify-between">
-          <dt className="text-muted">
-            {side === "buy" ? "Ask" : "Bid"} price
-          </dt>
+          <dt className="text-muted">Mark price</dt>
           <dd className="flex items-center gap-2 text-fg-strong">
             {stale && tick ? <StaleBadge since={tick.as_of} /> : null}
-            {price ? formatUsd(price) : "—"}
+            {mark ? formatUsd(mark) : "—"}
           </dd>
         </div>
         <div className="flex justify-between">
-          <dt className="text-muted">Est. {side === "buy" ? "cost" : "proceeds"}</dt>
-          <dd className="text-fg-strong">{estimate ? formatUsd(estimate) : "—"}</dd>
+          <dt className="text-muted">Notional</dt>
+          <dd className="text-fg-strong">{notional ? formatUsd(notional) : "—"}</dd>
         </div>
         <div className="flex justify-between">
-          <dt className="text-muted">
-            {side === "buy" ? "Cash available" : `${asset} held`}
-          </dt>
+          <dt className="text-muted">Position size</dt>
           <dd className="text-fg">
-            {side === "buy"
-              ? cash !== undefined
-                ? formatUsd(cash)
-                : "—"
-              : `${formatQty(heldQty, 10)} ${asset}`}
+            {size !== null ? `${size.toPrecision(6)} ${asset}` : "—"}
+          </dd>
+        </div>
+        <div className="flex justify-between">
+          <dt className="text-muted">Liquidation ≈</dt>
+          <dd className={side === "long" ? "text-down" : "text-down"}>
+            {liq !== null ? formatUsd(liq) : "—"}
           </dd>
         </div>
       </dl>
 
-      {overspend ? (
+      {existing ? (
         <p className="text-xs text-down">
-          That's more than your cash balance.
+          You have an open {existing.side} on {pair}. Close it before opening another.
         </p>
-      ) : null}
-      {oversell ? (
-        <p className="text-xs text-down">
-          You only hold {formatQty(heldQty, 10)} {asset}.
-        </p>
+      ) : overspend ? (
+        <p className="text-xs text-down">That's more than your free cash.</p>
       ) : null}
 
       <button
@@ -242,18 +261,22 @@ export function OrderTicket() {
         className="w-full rounded-control bg-accent px-3 py-2 text-sm font-semibold text-accent-fg transition-opacity hover:opacity-90 disabled:opacity-40"
       >
         {submitting
-          ? "Placing…"
-          : `${side === "buy" ? "Buy" : "Sell"} ${asset}`}
+          ? "Opening…"
+          : `Open ${side} · ${leverage}× ${asset}`}
       </button>
 
       <p className="text-[0.6875rem] leading-relaxed text-muted">
-        Market order, fills at the live {side === "buy" ? "ask" : "bid"}. The
-        estimate is a preview — the server prices the fill at execution.
+        Marked at the live price. Liquidation and entry are priced by the server at
+        execution — the numbers above are a preview.
       </p>
 
       <ResultNotice result={result} onRetry={submit} onDismiss={resetIntent} />
     </form>
   );
+}
+
+function isRejection(err: ApiError): boolean {
+  return err.status === 402 || err.status === 409 || err.status === 422;
 }
 
 function ResultNotice({
@@ -267,29 +290,27 @@ function ResultNotice({
 }) {
   if (!result) return null;
 
-  if (result.kind === "filled") {
-    const o = result.order;
+  if (result.kind === "opened") {
+    const p = result.position;
     return (
       <p
         role="status"
         className="border border-up/40 bg-up/10 px-3 py-2 text-xs text-up"
       >
-        {o.side === "buy" ? "Bought" : "Sold"} {formatQty(o.quantity, 10)}{" "}
-        {o.symbol.replace("/USD", "")} at{" "}
-        {o.execution_price ? formatUsd(o.execution_price) : "market"}.
+        Opened {p.side} {p.leverage}× {p.pair.replace("/USD", "")} · entry{" "}
+        {formatUsd(p.entry_price)} · liq {formatUsd(p.liquidation_price)}.
       </p>
     );
   }
 
   if (result.kind === "rejected") {
-    const reason = result.order.rejection_reason;
     return (
       <p
         role="status"
         className="border border-border bg-surface-2 px-3 py-2 text-xs text-fg"
       >
-        <span className="font-medium text-fg-strong">Order rejected.</span>{" "}
-        {reason ? REJECTION_COPY[reason] : "Try again."}
+        <span className="font-medium text-fg-strong">Rejected.</span>{" "}
+        {result.reason}
       </p>
     );
   }

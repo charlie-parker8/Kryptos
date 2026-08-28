@@ -1,58 +1,47 @@
 import { memo } from "react";
 
-import { ASSET_NAME, PAIR_OF, PAIR_PRECISION } from "@/core/lib/format";
-import {
-  formatQty,
-  formatSignedUsd,
-  formatUsd,
-  unrealizedPnl,
-} from "@/core/lib/money";
-import { dirOf } from "@/core/lib/direction";
+import { formatPercent, formatSignedUsd, formatUsd, pnlOf } from "@/core/lib/money";
 import { AnimatedNumber } from "@/core/primitives/AnimatedNumber";
-import { DirGlyph } from "@/core/primitives/DirGlyph";
 import { StaleBadge } from "@/core/primitives/StaleBadge";
-import type { Asset } from "@/core/realtime/types";
-import { useCash, useHolding, useHoldingSymbols } from "@/core/state/selectors";
+import { useDashboardData } from "@/core/useDashboardData";
+import { useOpenPositionIds, usePosition } from "@/core/state/selectors";
 
 export function Positions() {
-  const symbols = useHoldingSymbols();
-  const cash = useCash();
+  const ids = useOpenPositionIds();
+  const { freeCash } = useDashboardData();
 
   return (
     <div className="overflow-x-auto">
-      <table className="ledger w-full min-w-[44rem] text-sm">
+      <table className="ledger w-full min-w-[48rem] text-sm">
         <thead>
           <tr>
-            <th className="text-left">Symbol</th>
-            <th className="text-right">Quantity</th>
-            <th className="text-right">Avg cost</th>
-            <th className="text-right">Last</th>
-            <th className="text-right">Market value</th>
+            <th className="text-left">Side</th>
+            <th className="text-left">Pair</th>
+            <th className="text-right">Lev</th>
+            <th className="text-right">Collateral</th>
+            <th className="text-right">Entry</th>
+            <th className="text-right">Mark</th>
+            <th className="text-right">Liq</th>
             <th className="text-right">Unrealised P/L</th>
           </tr>
         </thead>
         <tbody>
-          {symbols.length === 0 ? (
+          {ids.length === 0 ? (
             <tr>
-              <td colSpan={6} className="py-8 text-center text-muted">
-                No positions yet — place your first trade.
+              <td colSpan={8} className="py-8 text-center text-muted">
+                No open positions — open one from the Trade page.
               </td>
             </tr>
           ) : (
-            symbols.map((symbol) => (
-              <PositionRow key={symbol} symbol={symbol} />
-            ))
+            ids.map((id) => <PositionRow key={id} id={id} />)
           )}
-          {cash !== undefined ? (
+          {freeCash !== undefined ? (
             <tr>
-              <td className="text-left font-medium text-fg-strong">Cash</td>
-              <td />
-              <td />
-              <td />
+              <td className="text-left font-medium text-fg-strong">Free cash</td>
+              <td colSpan={6} />
               <td className="text-right font-mono text-fg-strong tnum">
-                {formatUsd(cash)}
+                {formatUsd(freeCash)}
               </td>
-              <td />
             </tr>
           ) : null}
         </tbody>
@@ -61,49 +50,36 @@ export function Positions() {
   );
 }
 
-const PositionRow = memo(function PositionRow({ symbol }: { symbol: Asset }) {
-  const holding = useHolding(symbol);
-  if (!holding) return null;
+const PositionRow = memo(function PositionRow({ id }: { id: string }) {
+  const position = usePosition(id);
+  if (!position) return null;
 
-  const empty = Number(holding.quantity) === 0;
-  const precision = PAIR_PRECISION[PAIR_OF[symbol]];
-  const pnl = empty
-    ? null
-    : unrealizedPnl(
-        holding.average_cost,
-        holding.quantity,
-        holding.market_value,
-      );
-  const pnlDir = pnl ? dirOf(pnl.abs) : "flat";
+  const pnl = pnlOf(position.unrealized_pnl, position.collateral);
+  const dir = pnl === null ? "flat" : pnl.abs >= 0 ? "up" : "down";
 
   return (
     <tr className="cv-row">
       <td className="text-left">
-        <span className="font-mono text-fg-strong">{symbol}</span>
-        <span className="ml-2 text-[0.6875rem] uppercase tracking-wide text-muted">
-          {ASSET_NAME[symbol]}
+        <span
+          className={
+            position.side === "long"
+              ? "font-medium uppercase text-up"
+              : "font-medium uppercase text-down"
+          }
+        >
+          {position.side}
         </span>
       </td>
-      <td className="text-right font-mono">
-        {empty ? (
-          <span className="text-muted">—</span>
-        ) : (
-          formatQty(holding.quantity, precision)
-        )}
-      </td>
-      <td className="text-right font-mono">
-        {empty ? (
-          <span className="text-muted">—</span>
-        ) : (
-          formatUsd(holding.average_cost)
-        )}
-      </td>
+      <td className="text-left font-mono text-fg-strong">{position.pair}</td>
+      <td className="text-right font-mono">{position.leverage}×</td>
+      <td className="text-right font-mono">{formatUsd(position.collateral)}</td>
+      <td className="text-right font-mono">{formatUsd(position.entry_price)}</td>
       <td className="text-right font-mono">
         <span className="inline-flex items-center justify-end gap-2">
-          {holding.stale ? <StaleBadge /> : null}
-          {holding.current_price !== null ? (
+          {position.stale ? <StaleBadge /> : null}
+          {position.mark_price !== null ? (
             <AnimatedNumber
-              value={holding.current_price}
+              value={position.mark_price}
               format={(n) => formatUsd(n)}
             />
           ) : (
@@ -111,30 +87,22 @@ const PositionRow = memo(function PositionRow({ symbol }: { symbol: Asset }) {
           )}
         </span>
       </td>
-      <td className="text-right font-mono text-fg-strong">
-        {empty || holding.market_value === null ? (
-          <span className="text-muted">—</span>
-        ) : (
-          <AnimatedNumber
-            value={holding.market_value}
-            format={(n) => formatUsd(n)}
-            flash={false}
-          />
-        )}
+      <td className="text-right font-mono text-down">
+        {formatUsd(position.liquidation_price)}
       </td>
       <td className="text-right font-mono">
         {pnl ? (
           <span
             className={
-              pnlDir === "up"
+              dir === "up"
                 ? "text-up"
-                : pnlDir === "down"
+                : dir === "down"
                   ? "text-down"
                   : "text-muted"
             }
           >
-            <DirGlyph dir={pnlDir} size={8} className="mr-1.5" />
-            {formatSignedUsd(pnl.abs)}
+            {formatSignedUsd(pnl.abs)}{" "}
+            <span className="text-muted">({formatPercent(pnl.pct)})</span>
           </span>
         ) : (
           <span className="text-muted">—</span>

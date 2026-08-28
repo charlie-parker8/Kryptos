@@ -1,7 +1,7 @@
 /**
  * Money + number formatting. The backend is the sole authority on financial math (Decimal,
  * server-side); this module only *displays* the strings it sends and computes cosmetic
- * derived values (unrealised P/L for a holding row, a percent change for a price).
+ * derived values (a position's P/L percent, a preview liquidation price, a percent change).
  *
  * Rule from CLAUDE.md: never `parseFloat` a wire value for authoritative arithmetic. Here
  * the exact path is scaled-integer (`toMinor`/`fromMinor`); `Number(...)` is used only for
@@ -94,42 +94,72 @@ export function pctChange(from: string, to: string): number {
   return ((Number(to) - base) / base) * 100;
 }
 
+/** Maintenance-margin rate — mirrors `KRYPTOS_MAINTENANCE_MARGIN_RATE` (backend config). */
+export const MAINTENANCE_MARGIN_RATE = 0.005;
+
 /**
- * Cosmetic order-ticket estimate: `price * quantity`, exact via the scaled-integer path
- * (house rule: no float money math even when non-authoritative). The server recomputes the
- * real fill cost against the live bid/ask at execution time — this is only a preview.
- * Returns a 2dp decimal string, or `null` if either input isn't a valid decimal.
+ * Cosmetic ticket preview: position notional = `collateral * leverage`, exact via the
+ * scaled-integer path (house rule: no float money math even when non-authoritative).
+ * Returns a 2dp decimal string, or `null` if `collateral` isn't a valid decimal.
  */
-export function estimateNotional(
-  price: string,
-  quantity: string,
+export function notionalOf(
+  collateral: string,
+  leverage: number,
 ): string | null {
   try {
-    const scaled = toMinor(price, 2) * toMinor(quantity, 10); // scale 10^-12
-    return fromMinor(scaled / 10n ** 10n, 2); // truncate to cents
+    const scaled = toMinor(collateral, 2) * BigInt(Math.trunc(leverage));
+    return fromMinor(scaled, 2);
   } catch {
     return null;
   }
 }
 
+/** Preview position size (base-asset units) = notional / entry. Display-only; the server
+ * rounds down to the pair's precision at execution. */
+export function sizeOf(
+  notional: string,
+  entryPrice: string,
+): number | null {
+  const n = Number(notional);
+  const p = Number(entryPrice);
+  if (!Number.isFinite(n) || !Number.isFinite(p) || p === 0) return null;
+  return n / p;
+}
+
+/**
+ * Preview liquidation price — mirrors `positions_math.liquidation_price`. Display-only; the
+ * server stores the authoritative value at open. `entry * (1 + mmr - 1/L)` for a long,
+ * `entry * (1 - mmr + 1/L)` for a short.
+ */
+export function previewLiquidationPrice(
+  side: "long" | "short",
+  entryPrice: string,
+  leverage: number,
+): number | null {
+  const entry = Number(entryPrice);
+  if (!Number.isFinite(entry) || leverage <= 0) return null;
+  const invL = 1 / leverage;
+  const factor =
+    side === "long"
+      ? 1 + MAINTENANCE_MARGIN_RATE - invL
+      : 1 - MAINTENANCE_MARGIN_RATE + invL;
+  return Math.max(entry * factor, 0);
+}
+
 export interface Pnl {
   /** absolute unrealised gain/loss in USD */
   abs: number;
-  /** as a percent of cost basis */
+  /** as a percent of the position's collateral (its return on margin) */
   pct: number;
 }
 
-/** Unrealised P/L for one holding: market value minus cost basis (avg cost × quantity). */
-export function unrealizedPnl(
-  averageCost: string,
-  quantity: string,
-  marketValue: string | null,
+/** Unrealised P/L for one position: the server-sent number, plus its return on collateral. */
+export function pnlOf(
+  unrealizedPnl: string | null,
+  collateral: string,
 ): Pnl | null {
-  if (marketValue === null) return null;
-  const costBasisMinor = toMinor(averageCost, 8) * toMinor(quantity, 10); // scale 10^-18
-  const valueMinor = toMinor(marketValue, 2) * 10n ** 16n; // lift to scale 10^-18
-  const diffMinor = valueMinor - costBasisMinor;
-  const abs = Number(fromMinor(diffMinor, 18));
-  const costBasis = Number(fromMinor(costBasisMinor, 18));
-  return { abs, pct: costBasis === 0 ? 0 : (abs / costBasis) * 100 };
+  if (unrealizedPnl === null) return null;
+  const abs = Number(unrealizedPnl);
+  const base = Number(collateral);
+  return { abs, pct: base === 0 ? 0 : (abs / base) * 100 };
 }

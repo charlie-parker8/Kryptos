@@ -9,10 +9,11 @@ import { mutate } from "swr";
 import { apiPost } from "@/core/api/client";
 import type { SessionUser } from "@/core/api/types";
 import { disconnectRealtime } from "@/core/realtime/connectRealtime";
+import { resetAccount } from "@/core/state/accountStore";
 import { resetBankruptcy } from "@/core/state/bankruptcyStore";
 import { resetCandles } from "@/core/state/candleStore";
 import { resetMarket } from "@/core/state/marketStore";
-import { resetPortfolio } from "@/core/state/portfolioStore";
+import { resetPositionEvent } from "@/core/state/positionEventStore";
 import { SESSION_KEY } from "./useSession";
 
 export async function login(
@@ -43,11 +44,12 @@ export async function logout(): Promise<void> {
     await apiPost<null>("/auth/logout");
   } finally {
     disconnectRealtime();
-    resetPortfolio();
+    resetAccount();
     resetMarket();
     resetCandles();
     resetBankruptcy();
-    // Drop every cached response (portfolio, orders, …) so the next account starts clean.
+    resetPositionEvent();
+    // Drop every cached response (account, positions, …) so the next account starts clean.
     await mutate(() => true, undefined, { revalidate: false });
     await mutate(SESSION_KEY, null, { revalidate: false });
   }
