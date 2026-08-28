@@ -123,7 +123,7 @@
   }
   @keyframes k-marquee-scroll {
     to {
-      transform: translateX(-50%);
+      transform: translateX(calc(-100% / var(--k-marquee-copies, 2)));
     }
   }
 

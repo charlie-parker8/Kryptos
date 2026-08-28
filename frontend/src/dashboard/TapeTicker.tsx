@@ -11,9 +11,6 @@ import { useSessionAnchor, useTick } from "@/core/state/selectors";
 export function TapeTicker() {
   return (
     <div className="tape flex h-9 items-center px-3">
-      <span className="mr-4 shrink-0 text-[0.6875rem] font-medium uppercase tracking-[0.12em] text-accent">
-        Tape
-      </span>
       <Marquee durationSec={34} gap="3rem" className="flex-1">
         {PAIRS.map((pair) => (
           <TapeItem key={pair} pair={pair} />
