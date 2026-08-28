@@ -1,3 +1,4 @@
+import ssl
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -11,10 +12,28 @@ class Base(DeclarativeBase):
     pass
 
 
-# Shared by the app engine and Alembic (alembic/env.py). `ssl=True` gives asyncpg a
-# verifying TLS context against the system CA bundle — needed for the Supabase pooler,
-# off for local docker-compose Postgres.
-CONNECT_ARGS: dict[str, Any] = {"ssl": True} if get_settings().database_ssl else {}
+def build_db_ssl_context() -> ssl.SSLContext:
+    """Verifying TLS context for asyncpg against the Supabase pooler.
+
+    Equivalent to asyncpg's own `ssl=True` (full CA-chain + hostname verification
+    against the system trust store) with one exception: Python 3.13 added
+    ssl.VERIFY_X509_STRICT to the default verify flags, and Supabase's CA chain
+    fails it with "CA cert does not include key usage extension". We clear only
+    that RFC-5280 strictness flag; CERT_REQUIRED and check_hostname stay on, so
+    the certificate and hostname are still fully validated.
+    """
+    context = ssl.create_default_context()
+    if hasattr(ssl, "VERIFY_X509_STRICT"):
+        context.verify_flags &= ~ssl.VERIFY_X509_STRICT
+    return context
+
+
+# Shared by the app engine and Alembic (alembic/env.py) so both connect identically —
+# a verifying TLS context for the Supabase pooler, nothing for local docker-compose
+# Postgres.
+CONNECT_ARGS: dict[str, Any] = (
+    {"ssl": build_db_ssl_context()} if get_settings().database_ssl else {}
+)
 
 engine = create_async_engine(
     get_settings().database_url,
