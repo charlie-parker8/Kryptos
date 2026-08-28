@@ -7,12 +7,11 @@
 # asyncio tasks and the in-process WebSocket fan-out, so it must never scale past one
 # process (the Dockerfile hard-codes `--workers 1`; do not raise `numInstances`).
 #
-# Both services default to the Oregon region. If you move one, move the other — the web
-# service reaches Key Value over Render's private network, which requires a shared region.
 services:
   - type: keyvalue
     name: kryptos-kv
     plan: free
+    region: ohio
     # Everything Kryptos puts in Redis is a rebuildable cache (price cache, leaderboard
     # ZSET, rate-limit counters, OHLC candle cache — see CLAUDE.md invariant 8), so evict
     # under memory pressure rather than failing writes on the price stream.
@@ -24,6 +23,7 @@ services:
     name: kryptos-api
     runtime: docker
     plan: free
+    region: ohio
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
     healthCheckPath: /health
