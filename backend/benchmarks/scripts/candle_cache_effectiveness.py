@@ -120,6 +120,24 @@ def _git_commit() -> str:
     )
 
 
+def _record_result(section_marker: str, entry: str) -> None:
+    """Insert `entry` after `<!-- section_marker -->` in RESULTS.md (newest first) rather
+    than appending to EOF, so each milestone's runs stay under their own heading.
+    """
+    text = _RESULTS_PATH.read_text(encoding="utf-8") if _RESULTS_PATH.exists() else ""
+    anchor = f"<!-- {section_marker} -->"
+    head, sep, tail = text.partition(anchor)
+    block = entry.strip("\n")
+    if not sep:
+        _RESULTS_PATH.write_text(
+            text.rstrip("\n") + "\n\n" + block + "\n", encoding="utf-8"
+        )
+        return
+    _RESULTS_PATH.write_text(
+        head + anchor + "\n\n" + block + "\n\n" + tail.lstrip("\n"), encoding="utf-8"
+    )
+
+
 def _append_result(*, uncached: int, cached: int) -> None:
     reduction = (uncached - cached) / uncached * 100 if uncached else 0.0
     entry = (
@@ -132,8 +150,7 @@ def _append_result(*, uncached: int, cached: int) -> None:
         f"- Forming-candle WS broadcasts are coalesced to <=1/s per (pair, interval); "
         f"the `:forming` Redis write on every trade is not rate-limited.\n"
     )
-    with _RESULTS_PATH.open("a", encoding="utf-8") as f:
-        f.write(entry)
+    _record_result("MILESTONE-C-CANDLE-ENTRIES", entry)
     print(entry.strip())
 
 

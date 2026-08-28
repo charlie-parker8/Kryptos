@@ -89,16 +89,27 @@ async def get_board(
         "list[tuple[bytes, float]]",
         await redis_client.zrevrange(ZSET_KEY, 0, limit - 1, withscores=True),
     )
-    prev_raw: dict[Any, Any] = await redis_client.hgetall(PREV_RANKS_KEY)
-    prev_ranks = {_decode(k): int(v) for k, v in prev_raw.items()}
-
     viewer_key = str(viewer_id)
+    top_keys = [_decode(member) for member, _ in top]
+
+    # Previous ranks only for the rows this response renders (the page + the viewer's own
+    # row) — an HMGET of ~`limit` fields, not an HGETALL that is O(total accounts).
+    rank_keys = [*top_keys, viewer_key]
+    prev_values: list[bytes | str | None] = await redis_client.hmget(
+        PREV_RANKS_KEY, rank_keys
+    )
+    prev_ranks = {
+        key: int(value)
+        for key, value in zip(rank_keys, prev_values, strict=True)
+        if value is not None
+    }
+
     viewer_rank_raw = cast(
         "int | None", await redis_client.zrevrank(ZSET_KEY, viewer_key)
     )
     viewer_score = await redis_client.zscore(ZSET_KEY, viewer_key)
 
-    top_ids = [uuid.UUID(_decode(member)) for member, _ in top]
+    top_ids = [uuid.UUID(key) for key in top_keys]
     wanted = {*top_ids, viewer_id}
     usernames = {
         row_id: name
@@ -119,8 +130,7 @@ async def get_board(
         )
 
     entries = [
-        _entry(uuid.UUID(_decode(member)), i + 1, score)
-        for i, (member, score) in enumerate(top)
+        _entry(top_ids[i], i + 1, score) for i, (_, score) in enumerate(top)
     ]
 
     you: LeaderboardEntry | None = None

@@ -4,6 +4,7 @@ exercise a genuine lock race because ASGITransport serialises requests on one co
 """
 
 import asyncio
+import os
 import subprocess
 import time
 import uuid
@@ -17,9 +18,10 @@ from helpers import STARTING_CASH, set_market_price
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app import positions
+from app import positions, price_stream
 from app.config import Settings
 from app.market_data.fake import FakeMarketData
+from app.market_data.kraken import Ticker
 from app.models import LedgerEntry, Position, User
 
 pytestmark = pytest.mark.usefixtures("fake_market_data")
@@ -248,6 +250,123 @@ async def test_two_liquidation_passes_close_the_position_once(
     assert list(flags).count(True) == 1
 
 
+@pytest.mark.asyncio
+async def test_real_tick_liquidation_races_user_close(
+    redis_client: redis.Redis,
+    test_settings: Settings,
+    fake_market_data: FakeMarketData,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """The same close-vs-liquidation race as above, but driven through the real per-tick
+    engine: `price_stream.handle_tick` (Redis index scan → `close_position`) racing a user
+    close on the same position. Exactly one terminal transition, one terminal ledger entry,
+    consistent cash — whichever path wins.
+    """
+    await set_market_price(fake_market_data, redis_client, "BTC/USD", "50000")
+    uid = await _make_user(session_factory)
+    async with session_factory() as db:
+        opened = await positions.open_position(
+            db,
+            redis_client,
+            test_settings,
+            user_id=uid,
+            idempotency_key="open",
+            pair="BTC/USD",
+            side="long",
+            collateral=Decimal(1000),
+            leverage=10,
+        )
+    position_id = opened.id
+
+    # entry 50000, 10x long → stored liquidation price 45250. A tick to 45200 crosses it
+    # but still settles well above the bankruptcy floor (returns ~$40 to free cash).
+    await set_market_price(fake_market_data, redis_client, "BTC/USD", "45200")
+    crash_tick = Ticker(
+        pair="BTC/USD",
+        bid=Decimal(45200),
+        ask=Decimal(45200),
+        last=Decimal(45200),
+        as_of=datetime.now(UTC),
+    )
+
+    async def user_close() -> bool:
+        async with session_factory() as db:
+            _, closed_now = await positions.close_position(
+                db,
+                redis_client,
+                test_settings,
+                user_id=uid,
+                position_id=position_id,
+                reason="user",
+            )
+            return closed_now
+
+    _, user_closed_now = await asyncio.gather(
+        price_stream.handle_tick(
+            crash_tick, test_settings, redis_client, session_factory
+        ),
+        user_close(),
+    )
+
+    async with session_factory() as db:
+        terminal = (
+            (
+                await db.execute(
+                    select(LedgerEntry.entry_type).where(
+                        LedgerEntry.position_id == position_id,
+                        LedgerEntry.entry_type.in_(
+                            ("position_close", "liquidation")
+                        ),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(terminal) == 1
+
+        position = await db.get(Position, position_id)
+        assert position is not None
+        if terminal[0] == "liquidation":
+            assert position.status == "liquidated"
+            assert position.close_reason == "liquidation"
+            assert user_closed_now is False
+        else:
+            assert position.status == "closed"
+            assert position.close_reason == "user"
+            assert user_closed_now is True
+
+        user = await db.get(User, uid)
+        assert user is not None
+        ledger_sum = await db.scalar(
+            select(func.sum(LedgerEntry.cash_delta)).where(
+                LedgerEntry.user_id == uid
+            )
+        )
+        assert user.cash_balance == STARTING_CASH + ledger_sum
+        assert user.cash_balance >= 0  # invariant 1
+
+
+def _record_result(section_marker: str, entry: str) -> None:
+    """Insert `entry` just under the `<!-- section_marker -->` line in RESULTS.md so each
+    milestone's runs stay under their own heading (newest first), instead of every
+    appender piling onto EOF. Falls back to appending if the marker is missing.
+    """
+    _RESULTS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    text = _RESULTS_PATH.read_text(encoding="utf-8") if _RESULTS_PATH.exists() else ""
+    anchor = f"<!-- {section_marker} -->"
+    head, sep, tail = text.partition(anchor)
+    block = entry.strip("\n")
+    if not sep:
+        _RESULTS_PATH.write_text(
+            text.rstrip("\n") + "\n\n" + block + "\n", encoding="utf-8"
+        )
+        return
+    _RESULTS_PATH.write_text(
+        head + anchor + "\n\n" + block + "\n\n" + tail.lstrip("\n"), encoding="utf-8"
+    )
+
+
 def _append_benchmark_result(*, n: int, elapsed_seconds: float) -> None:
     commit = (
         subprocess.run(
@@ -267,9 +386,7 @@ def _append_benchmark_result(*, n: int, elapsed_seconds: float) -> None:
         f"- Invariant violations: 0 (cash_balance non-negative, exactly one terminal "
         f"ledger entry per position, asserted after the batch)\n"
     )
-    _RESULTS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with _RESULTS_PATH.open("a", encoding="utf-8") as f:
-        f.write(entry)
+    _record_result("MILESTONE-B-ENTRIES", entry)
 
 
 @pytest.mark.benchmark
@@ -280,7 +397,8 @@ async def test_position_lifecycle_throughput_benchmark(
     fake_market_data: FakeMarketData,
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
-    n = 200
+    # Default 200; raise with KRYPTOS_BENCH_N to probe deeper queue depth on the pool.
+    n = int(os.environ.get("KRYPTOS_BENCH_N", "200"))
     await set_market_price(fake_market_data, redis_client, "BTC/USD", "50000")
     uids = await asyncio.gather(*(_make_user(session_factory) for _ in range(n)))
 
