@@ -113,6 +113,18 @@ export function RegisterScreen() {
         {submitting ? "Creating…" : "Create account"}
       </button>
 
+      <p className="text-center text-[0.6875rem] leading-relaxed text-muted">
+        By creating an account you agree to the{" "}
+        <Link to="/terms" className="text-accent hover:underline">
+          Terms
+        </Link>{" "}
+        and{" "}
+        <Link to="/privacy" className="text-accent hover:underline">
+          Privacy Policy
+        </Link>
+        .
+      </p>
+
       <p className="text-center text-xs text-muted">
         Already have an account?{" "}
         <Link to="/login" className="text-accent hover:underline">
