@@ -2,19 +2,19 @@
  * Milestone C benchmark: p95/p99 read latency for GET /leaderboard under a sustained
  * concurrent read workload (backs resume bullet 3).
  *
- * The endpoint is authenticated, so setup() registers one account and reuses its
- * kryptos_session cookie for every VU. The Redis sorted set is populated by the backend's
- * periodic rebuild from every account in Postgres — to benchmark "N accounts", seed N
- * synthetic users first, e.g.:
+ * The endpoint is authenticated. `/auth/register` is rate-limited (5 / 300s / IP) and a
+ * sweep is several runs, so seed one account + N synthetic leaderboard accounts up front
+ * and pass the cookie in:
  *
- *   docker compose up -d
- *   python -c "import asyncio,uuid; \
- *     import redis.asyncio as r; \
- *     c=r.from_url('redis://localhost:6379/0'); \
- *     asyncio.run(c.zadd('leaderboard:equity', {str(uuid.uuid4()): 1_000_000 + i for i in range(5000)}))"
+ *   docker compose up -d            # Postgres + Redis
+ *   # app running on :8000
+ *   COOKIE=$(python backend/benchmarks/scripts/seed_bench_account.py --accounts 10000)
+ *   k6 run -e COOKIE=$COOKIE -e VUS=100 backend/benchmarks/k6/leaderboard_latency.js
+ *   python backend/benchmarks/scripts/seed_bench_account.py --clear
  *
- * Then, with the app running on :8000:
- *   k6 run backend/benchmarks/k6/leaderboard_latency.js
+ * seed_bench_account.py inserts the N accounts into Postgres and the leaderboard:equity
+ * ZSET, so the backend's 30s rebuild keeps them and the ranking is over N real accounts.
+ * Without -e COOKIE, setup() falls back to registering a throwaway account.
  *
  * Record the p95/p99 from the summary into backend/benchmarks/RESULTS.md.
  */
@@ -41,6 +41,9 @@ export const options = {
 };
 
 export function setup() {
+  if (__ENV.COOKIE) {
+    return { cookie: __ENV.COOKIE };
+  }
   const suffix = `${Date.now()}${Math.floor(Math.random() * 1e4)}`;
   const res = http.post(
     `${BASE}/auth/register`,

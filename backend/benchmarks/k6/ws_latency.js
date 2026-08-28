@@ -13,6 +13,12 @@
  *   k6 run backend/benchmarks/k6/ws_latency.js
  *   VUS=200 DURATION=90s k6 run backend/benchmarks/k6/ws_latency.js
  *
+ * A ceiling sweep is several runs in a few minutes, and `/auth/register` is rate-limited
+ * (5 / 300s / IP), so pass a pre-seeded session cookie and skip registration:
+ *
+ *   COOKIE=$(python backend/benchmarks/scripts/seed_bench_account.py)
+ *   k6 run -e COOKIE=$COOKIE -e VUS=200 backend/benchmarks/k6/ws_latency.js
+ *
  * Record the p95/p99 of `ws_tick_latency_ms` and the VU count into
  * backend/benchmarks/RESULTS.md.
  */
@@ -43,6 +49,9 @@ export const options = {
 };
 
 export function setup() {
+  if (__ENV.COOKIE) {
+    return { cookie: __ENV.COOKIE };
+  }
   const suffix = `${Date.now()}${Math.floor(Math.random() * 1e4)}`;
   const res = http.post(
     `${BASE}/auth/register`,
