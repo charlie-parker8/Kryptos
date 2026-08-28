@@ -2,15 +2,16 @@ import { Link } from "react-router";
 
 import { useLeaderboard } from "@/core/hooks/useLeaderboard";
 import { formatClock } from "@/core/lib/format";
-import { formatUsd } from "@/core/lib/money";
+import { formatSignedUsd, formatUsd } from "@/core/lib/money";
 import { Delta } from "@/core/primitives/Delta";
-import { PAIRS } from "@/core/realtime/types";
+import { LEVERAGE_PRESETS, PAIRS } from "@/core/realtime/types";
 import { useDashboardData } from "@/core/useDashboardData";
 import { Positions } from "./Positions";
 import { SplitFlapNumber } from "./SplitFlapNumber";
 
 export function Dashboard() {
-  const { netWorth, pnlVsStart, startingCash, asOf } = useDashboardData();
+  const { equity, freeCash, unrealizedPnl, pnlVsStart, startingCash, asOf } =
+    useDashboardData();
   const { standings } = useLeaderboard();
   const startingCashLabel = startingCash ? formatUsd(startingCash) : "—";
   const topStandings = standings?.slice(0, 4) ?? [];
@@ -20,7 +21,7 @@ export function Dashboard() {
       <section className="border-b border-border pb-6">
         <div className="flex items-baseline justify-between">
           <h1 className="text-[0.6875rem] font-medium uppercase tracking-[0.12em] text-muted">
-            Net worth
+            Account equity
           </h1>
           {asOf ? (
             <span className="font-mono text-[0.6875rem] text-muted">
@@ -29,24 +30,48 @@ export function Dashboard() {
           ) : null}
         </div>
         <div className="mt-3 overflow-x-auto">
-          {netWorth ? (
+          {equity ? (
             <SplitFlapNumber
               className="text-[2rem] sm:text-5xl lg:text-6xl"
-              value={netWorth}
+              value={equity}
               format={(n) => formatUsd(n)}
             />
           ) : (
             <span className="font-mono text-5xl text-muted">—</span>
           )}
         </div>
-        {pnlVsStart ? (
-          <p className="mt-3 flex items-center gap-3 text-sm">
-            <Delta abs={pnlVsStart.abs} pct={pnlVsStart.pct} />
-            <span className="text-muted">
-              against the {startingCashLabel} you started with
+        <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+          {pnlVsStart ? (
+            <span className="flex items-center gap-3">
+              <Delta abs={pnlVsStart.abs} pct={pnlVsStart.pct} />
+              <span className="text-muted">
+                against the {startingCashLabel} you started with
+              </span>
             </span>
-          </p>
-        ) : null}
+          ) : null}
+          <span className="font-mono text-xs text-muted">
+            Free cash{" "}
+            <span className="text-fg">
+              {freeCash !== undefined ? formatUsd(freeCash) : "—"}
+            </span>
+          </span>
+          <span className="font-mono text-xs text-muted">
+            Unrealised{" "}
+            <span
+              className={
+                unrealizedPnl !== undefined && Number(unrealizedPnl) < 0
+                  ? "text-down"
+                  : unrealizedPnl !== undefined && Number(unrealizedPnl) > 0
+                    ? "text-up"
+                    : "text-fg"
+              }
+            >
+              {unrealizedPnl !== undefined
+                ? formatSignedUsd(unrealizedPnl)
+                : "—"}
+            </span>
+          </span>
+        </div>
       </section>
 
       <section>
@@ -74,7 +99,7 @@ export function Dashboard() {
                   <span>
                     {row.rank}. {row.username}
                   </span>
-                  <span>{formatUsd(row.net_worth)}</span>
+                  <span>{formatUsd(row.equity)}</span>
                 </li>
               ))}
             </ol>
@@ -88,8 +113,8 @@ export function Dashboard() {
             Reset rule
           </h3>
           <p className="mt-3 text-xs leading-relaxed text-muted">
-            If net worth reaches $0, the account resets to {startingCashLabel} and
-            holdings clear. Order and ledger history is kept.
+            If account equity reaches $0, the account resets to {startingCashLabel},
+            every open position closes, and history is kept.
           </p>
         </article>
 
@@ -103,14 +128,20 @@ export function Dashboard() {
               <dd className="text-fg">{startingCashLabel}</dd>
             </div>
             <div className="flex justify-between">
+              <dt>Leverage</dt>
+              <dd className="text-fg">
+                {LEVERAGE_PRESETS.map((l) => `${l}×`).join(" · ")}
+              </dd>
+            </div>
+            <div className="flex justify-between">
               <dt>Pairs</dt>
               <dd className="text-fg">
                 {PAIRS.map((p) => p.replace("/USD", "")).join(" · ")}
               </dd>
             </div>
             <div className="flex justify-between">
-              <dt>Price max age</dt>
-              <dd className="text-fg">10s</dd>
+              <dt>Maint. margin</dt>
+              <dd className="text-fg">0.5%</dd>
             </div>
           </dl>
         </article>

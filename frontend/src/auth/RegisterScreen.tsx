@@ -59,7 +59,8 @@ export function RegisterScreen() {
     <form onSubmit={onSubmit} className="space-y-4" noValidate>
       <h1 className="text-sm font-semibold text-fg-strong">Create an account</h1>
       <p className="text-xs leading-relaxed text-muted">
-        You start with a fake $100,000. Trade BTC, ETH, and SOL at live prices.
+        You start with a fake $10,000. Go long or short on BTC, ETH, and SOL with
+        leverage, priced live off Kraken.
       </p>
 
       <AuthField

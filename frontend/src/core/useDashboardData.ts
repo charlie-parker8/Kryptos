@@ -10,26 +10,29 @@ import type { Pnl } from "@/core/lib/money";
 import { IS_MOCK_MODE } from "@/core/realtime/mode";
 import { STARTING_CASH } from "@/core/realtime/mockSource";
 import {
-  useCash,
+  useAccountAsOf,
+  useEquity,
+  useFreeCash,
   useIsConnected,
-  useNetWorth,
-  usePortfolioAsOf,
+  useTotalUnrealizedPnl,
 } from "@/core/state/selectors";
 
 export interface DashboardData {
-  netWorth: string | undefined;
-  cash: string | undefined;
+  equity: string | undefined;
+  freeCash: string | undefined;
+  unrealizedPnl: string | undefined;
   startingCash: string | undefined;
-  /** net worth minus the starting balance — the number the whole screen is really about */
+  /** equity minus the starting balance — the number the whole screen is really about */
   pnlVsStart: Pnl | null;
   connected: boolean;
   asOf: string | undefined;
 }
 
 export function useDashboardData(): DashboardData {
-  const netWorth = useNetWorth();
-  const cash = useCash();
-  const asOf = usePortfolioAsOf();
+  const equity = useEquity();
+  const freeCash = useFreeCash();
+  const unrealizedPnl = useTotalUnrealizedPnl();
+  const asOf = useAccountAsOf();
   const connected = useIsConnected();
   const { user } = useSession();
 
@@ -37,18 +40,19 @@ export function useDashboardData(): DashboardData {
     user?.starting_cash_balance ?? (IS_MOCK_MODE ? STARTING_CASH : undefined);
 
   const pnlVsStart =
-    netWorth === undefined || startingCash === undefined
+    equity === undefined || startingCash === undefined
       ? null
       : {
-          abs: Number(netWorth) - Number(startingCash),
+          abs: Number(equity) - Number(startingCash),
           pct:
-            ((Number(netWorth) - Number(startingCash)) / Number(startingCash)) *
+            ((Number(equity) - Number(startingCash)) / Number(startingCash)) *
             100,
         };
 
   return {
-    netWorth,
-    cash,
+    equity,
+    freeCash,
+    unrealizedPnl,
     startingCash,
     pnlVsStart,
     connected,

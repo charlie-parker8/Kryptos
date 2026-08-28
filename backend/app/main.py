@@ -22,8 +22,8 @@ from app.redis_client import redis_client
 from app.routers.auth import router as auth_router
 from app.routers.candles import router as candles_router
 from app.routers.leaderboard import router as leaderboard_router
-from app.routers.orders import router as orders_router
 from app.routers.portfolio import router as portfolio_router
+from app.routers.positions import router as positions_router
 from app.routers.ws import router as ws_router
 
 _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
@@ -93,7 +93,7 @@ app.add_middleware(
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=_settings.allowed_hosts)
 
 app.include_router(auth_router)
-app.include_router(orders_router)
+app.include_router(positions_router)
 app.include_router(portfolio_router)
 app.include_router(ws_router)
 app.include_router(leaderboard_router)
