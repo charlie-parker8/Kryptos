@@ -11,10 +11,8 @@ export function LeaderboardScreen() {
         <h1 className="text-[0.6875rem] font-medium uppercase tracking-[0.12em] text-muted">
           Leaderboard
         </h1>
-        <p className="mt-2 max-w-prose text-sm text-muted">
-          Every account ranked by net worth — cash plus the market value of
-          holdings — updated as the market moves. The move column is the change in
-          rank since the last standings sweep.
+        <p className="mt-2 text-sm text-muted">
+          Every account ranked by net worth
         </p>
       </header>
 
