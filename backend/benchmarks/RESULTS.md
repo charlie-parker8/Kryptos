@@ -96,3 +96,9 @@ only `:forming` warm and makes no REST calls.
 - Elapsed: 1.972s
 - Throughput: 101.4 orders/sec
 - Invariant violations: 0 (cash_balance and holdings asserted non-negative after the batch)
+
+### 2026-08-28 — 012b8c1
+- N concurrent orders: 200
+- Elapsed: 2.013s
+- Throughput: 99.4 orders/sec
+- Invariant violations: 0 (cash_balance and holdings asserted non-negative after the batch)
