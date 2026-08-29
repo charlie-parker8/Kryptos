@@ -134,7 +134,7 @@ function ChartBody({
   hasError,
   onRetry,
 }: ChartBodyProps) {
-  if (bars.length > 0) {
+  if (bars.length > 0 && hasSeed) {
     return (
       <div className="relative h-full">
         <CandleChartCanvas bars={bars} interval={interval} />
