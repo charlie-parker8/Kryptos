@@ -78,11 +78,16 @@ export function CandleChartCanvas({ bars, interval }: Props) {
         from: bars.length - DEFAULT_VISIBLE_BARS,
         to: bars.length + 3, // a few bars of right margin
       });
+      seededIntervalRef.current = interval;
     } else {
+      // Only the live overlay so far — the REST seed hasn't landed. Fit what we
+      // have but leave the timeframe un-seeded, so the seed still gets the wide
+      // default window (not this frozen 1–2 bar view) when it arrives.
       timeScale.fitContent();
     }
-    seededIntervalRef.current = interval;
-    containerRef.current?.setAttribute("data-chart-ready", "1");
+    if (seededIntervalRef.current === interval) {
+      containerRef.current?.setAttribute("data-chart-ready", "1");
+    }
   }, [bars, interval]);
 
   return <div ref={containerRef} className="h-full w-full" />;
