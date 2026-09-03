@@ -29,3 +29,11 @@ def generate_session_token() -> str:
 
 def hash_session_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def normalize_email(value: str) -> str:
+    """Canonical form stored in `users.email` — trimmed and lowercased. Deliberately simple:
+    no provider-specific dot/plus-tag folding (a Gmail-ism, out of scope). The DB CHECK
+    `email = lower(email)` backstops this.
+    """
+    return value.strip().lower()
