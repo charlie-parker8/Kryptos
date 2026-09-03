@@ -2,6 +2,7 @@ import type { LeaderboardEntry } from "@/core/api/types";
 import { useSession } from "@/core/auth/useSession";
 import { useLeaderboard } from "@/core/hooks/useLeaderboard";
 import { formatUsd } from "@/core/lib/money";
+import { SkeletonRows } from "@/core/primitives/Skeleton";
 
 export function LeaderboardScreen() {
   const { standings, you, isLoading, error } = useLeaderboard();
@@ -13,9 +14,6 @@ export function LeaderboardScreen() {
         <h1 className="text-[0.6875rem] font-medium uppercase tracking-[0.12em] text-muted">
           Leaderboard
         </h1>
-        <p className="mt-2 text-sm text-muted">
-          Top 100 accounts ranked by equity
-        </p>
         {user && !user.email_verified ? (
           <p className="mt-2 text-xs text-muted">
             Verify your email to appear on the leaderboard.
@@ -41,11 +39,7 @@ export function LeaderboardScreen() {
                 </td>
               </tr>
             ) : isLoading || !standings ? (
-              <tr>
-                <td colSpan={4} className="py-8 text-center text-muted">
-                  Loading…
-                </td>
-              </tr>
+              <SkeletonRows cols={4} rows={10} />
             ) : standings.length === 0 ? (
               <tr>
                 <td colSpan={4} className="py-8 text-center text-muted">

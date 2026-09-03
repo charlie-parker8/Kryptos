@@ -10,9 +10,6 @@ export function TradeScreen() {
         <h1 className="text-[0.6875rem] font-medium uppercase tracking-[0.12em] text-muted">
           Trade
         </h1>
-        <p className="mt-2 max-w-prose text-sm text-muted">
-          Isolated-margin long/short against live Kraken prices
-        </p>
       </header>
 
       <PriceChart />
