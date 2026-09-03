@@ -4,6 +4,7 @@ import { Link, Navigate, useNavigate } from "react-router";
 import { ApiError } from "@/core/api/client";
 import { register } from "@/core/auth/api";
 import { useSession } from "@/core/auth/useSession";
+import { Button } from "@/core/primitives/Button";
 import { AuthField } from "./AuthField";
 
 const USERNAME_RE = /^[A-Za-z0-9._-]+$/;
@@ -56,8 +57,10 @@ export function RegisterScreen() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4" noValidate>
-      <h1 className="text-sm font-semibold text-fg-strong">Create an account</h1>
+    <form onSubmit={onSubmit} className="space-y-5" noValidate>
+      <h1 className="text-base font-semibold tracking-tight text-fg-strong">
+        Create an account
+      </h1>
       <p className="text-xs leading-relaxed text-muted">
         You start with a fake $10,000. Go long or short on BTC, ETH, and SOL with
         leverage, priced live off Kraken.
@@ -109,13 +112,9 @@ export function RegisterScreen() {
         </p>
       ) : null}
 
-      <button
-        type="submit"
-        disabled={submitting}
-        className="w-full rounded-control bg-accent px-3 py-2 text-sm font-semibold text-accent-fg transition-opacity hover:opacity-90 disabled:opacity-50"
-      >
+      <Button variant="primary" full type="submit" disabled={submitting}>
         {submitting ? "Creating…" : "Create account"}
-      </button>
+      </Button>
 
       <p className="text-center text-[0.6875rem] leading-relaxed text-muted">
         By creating an account you agree to the{" "}

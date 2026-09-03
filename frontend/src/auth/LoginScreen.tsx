@@ -4,6 +4,7 @@ import { Link, Navigate, useLocation, useNavigate } from "react-router";
 import { ApiError } from "@/core/api/client";
 import { login } from "@/core/auth/api";
 import { useSession } from "@/core/auth/useSession";
+import { Button } from "@/core/primitives/Button";
 import { AuthField } from "./AuthField";
 
 function messageFor(error: unknown): string {
@@ -45,8 +46,10 @@ export function LoginScreen() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4" noValidate>
-      <h1 className="text-sm font-semibold text-fg-strong">Sign in</h1>
+    <form onSubmit={onSubmit} className="space-y-5" noValidate>
+      <h1 className="text-base font-semibold tracking-tight text-fg-strong">
+        Sign in
+      </h1>
 
       <AuthField
         id="email"
@@ -76,13 +79,9 @@ export function LoginScreen() {
         </p>
       ) : null}
 
-      <button
-        type="submit"
-        disabled={submitting}
-        className="w-full rounded-control bg-accent px-3 py-2 text-sm font-semibold text-accent-fg transition-opacity hover:opacity-90 disabled:opacity-50"
-      >
+      <Button variant="primary" full type="submit" disabled={submitting}>
         {submitting ? "Signing in…" : "Sign in"}
-      </button>
+      </Button>
 
       <p className="text-center text-xs text-muted">
         New here?{" "}
