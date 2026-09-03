@@ -127,6 +127,32 @@
     }
   }
 
+  /* Skeleton loader — shaped placeholder + soft shimmer. On-palette in both themes. */
+  .k-skeleton {
+    position: relative;
+    overflow: hidden;
+    background-color: var(--color-surface-2);
+    border-radius: var(--radius-control);
+  }
+  .k-skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in srgb, var(--color-fg) 9%, transparent),
+      transparent
+    );
+    animation: k-skeleton-shimmer 1.4s ease-in-out infinite;
+  }
+  @keyframes k-skeleton-shimmer {
+    100% {
+      transform: translateX(100%);
+    }
+  }
+
   /* Modal — a quick, small entrance; the reduced-motion backstop below neutralises it. */
   .k-modal-backdrop {
     animation: k-modal-fade 140ms ease-out;
@@ -150,6 +176,9 @@
 /* Frozen mode (screenshots): hold looping animations at their first frame. */
 [data-frozen] .k-marquee-track,
 [data-frozen] .animate-ping {
+  animation-play-state: paused !important;
+}
+[data-frozen] .k-skeleton::after {
   animation-play-state: paused !important;
 }
 
@@ -177,5 +206,12 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+
+  /* The shimmer sweep is decorative — drop it entirely rather than let the global
+     0.01ms backstop flash it once. The shaped block still reads as a placeholder. */
+  .k-skeleton::after {
+    content: none;
+    animation: none;
   }
 }
