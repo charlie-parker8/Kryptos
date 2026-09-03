@@ -4,6 +4,7 @@ import { useLeaderboard } from "@/core/hooks/useLeaderboard";
 import { formatClock } from "@/core/lib/format";
 import { formatSignedUsd, formatUsd } from "@/core/lib/money";
 import { Delta } from "@/core/primitives/Delta";
+import { Skeleton } from "@/core/primitives/Skeleton";
 import { LEVERAGE_PRESETS, PAIRS } from "@/core/realtime/types";
 import { useDashboardData } from "@/core/useDashboardData";
 import { Positions } from "./Positions";
@@ -37,7 +38,7 @@ export function Dashboard() {
               format={(n) => formatUsd(n)}
             />
           ) : (
-            <span className="font-mono text-5xl text-muted">—</span>
+            <Skeleton className="h-[2rem] w-56 sm:h-12 lg:h-14" />
           )}
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
@@ -51,25 +52,29 @@ export function Dashboard() {
           ) : null}
           <span className="font-mono text-xs text-muted">
             Free cash{" "}
-            <span className="text-fg">
-              {freeCash !== undefined ? formatUsd(freeCash) : "—"}
-            </span>
+            {freeCash !== undefined ? (
+              <span className="text-fg">{formatUsd(freeCash)}</span>
+            ) : (
+              <Skeleton className="inline-block h-3 w-16 align-middle" />
+            )}
           </span>
           <span className="font-mono text-xs text-muted">
             Unrealised{" "}
-            <span
-              className={
-                unrealizedPnl !== undefined && Number(unrealizedPnl) < 0
-                  ? "text-down"
-                  : unrealizedPnl !== undefined && Number(unrealizedPnl) > 0
-                    ? "text-up"
-                    : "text-fg"
-              }
-            >
-              {unrealizedPnl !== undefined
-                ? formatSignedUsd(unrealizedPnl)
-                : "—"}
-            </span>
+            {unrealizedPnl !== undefined ? (
+              <span
+                className={
+                  Number(unrealizedPnl) < 0
+                    ? "text-down"
+                    : Number(unrealizedPnl) > 0
+                      ? "text-up"
+                      : "text-fg"
+                }
+              >
+                {formatSignedUsd(unrealizedPnl)}
+              </span>
+            ) : (
+              <Skeleton className="inline-block h-3 w-16 align-middle" />
+            )}
           </span>
         </div>
       </section>
@@ -104,7 +109,11 @@ export function Dashboard() {
               ))}
             </ol>
           ) : (
-            <p className="mt-3 text-xs text-muted">Standings load in a moment…</p>
+            <div className="mt-3 space-y-1.5">
+              {Array.from({ length: 4 }, (_, i) => (
+                <Skeleton key={i} className="h-3 w-full" />
+              ))}
+            </div>
           )}
         </Link>
 

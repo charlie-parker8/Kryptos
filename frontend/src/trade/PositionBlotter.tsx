@@ -1,6 +1,7 @@
 import type { Position } from "@/core/api/types";
 import { usePositions } from "@/core/hooks/usePositions";
 import { formatSignedUsd, formatUsd } from "@/core/lib/money";
+import { SkeletonRows } from "@/core/primitives/Skeleton";
 
 function time(iso: string): string {
   return new Date(iso).toLocaleTimeString("en-US", { hour12: false });
@@ -40,11 +41,7 @@ export function PositionBlotter() {
                 </td>
               </tr>
             ) : isLoading ? (
-              <tr>
-                <td colSpan={6} className="py-8 text-center text-muted">
-                  Loading…
-                </td>
-              </tr>
+              <SkeletonRows cols={6} rows={5} />
             ) : !positions || positions.length === 0 ? (
               <tr>
                 <td colSpan={6} className="py-8 text-center text-muted">
