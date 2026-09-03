@@ -30,6 +30,10 @@ Input: `pair`, `side ∈ {long, short}`, `collateral` (USD Decimal, ≤ 2 dp), `
 Guards, in order — the first failure is the rejection (nothing is persisted, the
 idempotency key stays unconsumed):
 
+0. account email verified (`users.email_verified_at IS NOT NULL`) → else
+   `email_not_verified` (403). Checked in the router before `open_position()`, so an
+   unverified account is refused even on an idempotent retry (nothing is persisted, the key
+   stays unconsumed). Does not affect closing or liquidation — you can always reduce risk.
 1. `leverage ∈ presets` → else `leverage_not_allowed` (422)
 2. `collateral ≥ min_collateral` → else `below_min_collateral` (422)
 3. fresh `last` price (invariant 10) → else `stale_price` (409)
