@@ -1,9 +1,11 @@
 import type { LeaderboardEntry } from "@/core/api/types";
+import { useSession } from "@/core/auth/useSession";
 import { useLeaderboard } from "@/core/hooks/useLeaderboard";
 import { formatUsd } from "@/core/lib/money";
 
 export function LeaderboardScreen() {
   const { standings, you, isLoading, error } = useLeaderboard();
+  const { user } = useSession();
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -14,6 +16,11 @@ export function LeaderboardScreen() {
         <p className="mt-2 text-sm text-muted">
           Top 100 accounts ranked by equity
         </p>
+        {user && !user.email_verified ? (
+          <p className="mt-2 text-xs text-muted">
+            Verify your email to appear on the leaderboard.
+          </p>
+        ) : null}
       </header>
 
       <div className="overflow-x-auto border border-border">
