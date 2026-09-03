@@ -3,12 +3,14 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 import redis.asyncio as redis
+from helpers import open_position, set_market_price
 from httpx import AsyncClient
 from mailer_capture import SentEmail, verification_token_for
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app import leaderboard
 from app.config import Settings
+from app.market_data.fake import FakeMarketData
 from app.models import EmailVerificationToken
 from app.security import hash_session_token
 
@@ -120,6 +122,37 @@ async def test_verify_request_is_rate_limited(
         (await client.post("/auth/verify/request")).status_code for _ in range(7)
     ]
     assert 429 in codes
+
+
+@pytest.mark.asyncio
+async def test_open_position_blocked_until_verified(
+    client: AsyncClient,
+    redis_client: redis.Redis,
+    fake_market_data: FakeMarketData,
+) -> None:
+    await _register_unverified(client)  # client authenticated, unverified
+    await set_market_price(fake_market_data, redis_client, "BTC/USD", "50000")
+
+    blocked = await open_position(
+        client, pair="BTC/USD", side="long", collateral="1000"
+    )
+    assert blocked.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_open_position_allowed_after_verify(
+    client: AsyncClient,
+    redis_client: redis.Redis,
+    fake_market_data: FakeMarketData,
+) -> None:
+    email, _ = await _register_unverified(client)
+    await client.post(
+        "/auth/verify/confirm", json={"token": verification_token_for(email)}
+    )
+    await set_market_price(fake_market_data, redis_client, "BTC/USD", "50000")
+
+    ok = await open_position(client, pair="BTC/USD", side="long", collateral="1000")
+    assert ok.status_code == 201
 
 
 @pytest.mark.asyncio

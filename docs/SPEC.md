@@ -3,14 +3,16 @@
 Crypto **leveraged** paper-trading web app: real-time cryptocurrency market prices, fake money, no real trades ever execute. Users open isolated-margin long/short positions with leverage; the server marks, prices, and liquidates them. See `docs/leverage-model.md` for the full position / P&L / margin / liquidation / bankruptcy rules.
 
 ## MVP scope
-- Email/password auth with sessions
+- Email/password auth with sessions; email verification (transactional email via a single
+  adapter) is required before opening a position or entering the leaderboard
 - Starting cash balance per account, configurable, not hardcoded (**$10,000** default)
 - Isolated-margin **long/short positions**: user picks pair, side, USD collateral, and a leverage preset (2×/5×/10×); the position opens at the live price
 - One open position per (account, pair); no simultaneous hedged positions; no partial closes
 - Live per-position unrealized P&L, stored liquidation price, and account equity (free cash + Σ open-position collateral + unrealized P&L)
 - Full position closing (user-initiated) and automatic liquidation when a position's equity falls to the maintenance margin
 - Live price updates pushed to clients over WebSocket
-- Redis-backed leaderboard, ranked by **account equity**
+- Redis-backed leaderboard, ranked by **account equity** (verified accounts only — the
+  periodic rebuild filters to `email_verified_at IS NOT NULL`)
 - Bankruptcy handling: account equity at or below the configured floor ($0 default) closes every open position, restores starting cash, and preserves history
 - Read-only OHLC candlestick chart on the Trade page (unchanged from before — display only)
 
