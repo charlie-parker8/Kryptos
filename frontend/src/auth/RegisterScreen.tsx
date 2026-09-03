@@ -62,6 +62,10 @@ export function RegisterScreen() {
         You start with a fake $10,000. Go long or short on BTC, ETH, and SOL with
         leverage, priced live off Kraken.
       </p>
+      <p className="text-xs leading-relaxed text-muted">
+        We'll email you a link to confirm your address — verify it to open positions and
+        join the leaderboard.
+      </p>
 
       <AuthField
         id="email"
