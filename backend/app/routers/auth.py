@@ -4,7 +4,7 @@ from decimal import Decimal
 
 import redis.asyncio as redis
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +20,7 @@ from app.security import (
     generate_session_token,
     hash_password,
     hash_session_token,
+    normalize_email,
     verify_password,
 )
 
@@ -43,10 +44,20 @@ class RegisterRequest(BaseModel):
     )
     password: str = Field(min_length=8, max_length=72)
 
+    @field_validator("email")
+    @classmethod
+    def _normalize_email(cls, value: str) -> str:
+        return normalize_email(value)
+
 
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=72)
+
+    @field_validator("email")
+    @classmethod
+    def _normalize_email(cls, value: str) -> str:
+        return normalize_email(value)
 
 
 class UserResponse(BaseModel):
@@ -55,6 +66,7 @@ class UserResponse(BaseModel):
     id: uuid.UUID
     email: str
     username: str
+    email_verified: bool
     cash_balance: Decimal
     starting_cash_balance: Decimal
     created_at: datetime

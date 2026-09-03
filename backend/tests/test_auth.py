@@ -44,6 +44,7 @@ async def test_register_creates_user_with_configured_starting_balance(
     assert body["username"] == body_in["username"]
     assert Decimal(str(body["cash_balance"])) == settings.starting_cash_balance
     assert Decimal(str(body["starting_cash_balance"])) == settings.starting_cash_balance
+    assert body["email_verified"] is False
     assert SESSION_COOKIE_NAME in response.cookies
 
 
@@ -199,6 +200,7 @@ async def test_me_returns_current_user_with_valid_session(client: AsyncClient) -
     assert response.status_code == 200
     assert response.json()["email"] == body_in["email"]
     assert response.json()["username"] == body_in["username"]
+    assert response.json()["email_verified"] is False
 
 
 @pytest.mark.asyncio
