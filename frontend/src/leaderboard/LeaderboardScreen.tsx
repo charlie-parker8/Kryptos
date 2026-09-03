@@ -14,9 +14,6 @@ export function LeaderboardScreen() {
         <h1 className="text-[0.6875rem] font-medium uppercase tracking-[0.12em] text-muted">
           Leaderboard
         </h1>
-        <p className="mt-2 text-sm text-muted">
-          Top 100 accounts ranked by equity
-        </p>
         {user && !user.email_verified ? (
           <p className="mt-2 text-xs text-muted">
             Verify your email to appear on the leaderboard.

@@ -7,6 +7,7 @@ import { Delta } from "@/core/primitives/Delta";
 import { Skeleton } from "@/core/primitives/Skeleton";
 import { LEVERAGE_PRESETS, PAIRS } from "@/core/realtime/types";
 import { useDashboardData } from "@/core/useDashboardData";
+import { MarginHealth } from "./MarginHealth";
 import { Positions } from "./Positions";
 import { SplitFlapNumber } from "./SplitFlapNumber";
 
@@ -45,9 +46,6 @@ export function Dashboard() {
           {pnlVsStart ? (
             <span className="flex items-center gap-3">
               <Delta abs={pnlVsStart.abs} pct={pnlVsStart.pct} />
-              <span className="text-muted">
-                against the {startingCashLabel} you started with
-              </span>
             </span>
           ) : null}
           <span className="font-mono text-xs text-muted">
@@ -117,15 +115,7 @@ export function Dashboard() {
           )}
         </Link>
 
-        <article className="border border-border p-4">
-          <h3 className="text-xs font-medium uppercase tracking-wide text-fg-strong">
-            Reset rule
-          </h3>
-          <p className="mt-3 text-xs leading-relaxed text-muted">
-            If account equity reaches $0, the account resets to {startingCashLabel},
-            every open position closes, and history is kept.
-          </p>
-        </article>
+        <MarginHealth />
 
         <article className="border border-border p-4">
           <h3 className="text-xs font-medium uppercase tracking-wide text-fg-strong">
@@ -151,6 +141,10 @@ export function Dashboard() {
             <div className="flex justify-between">
               <dt>Maint. margin</dt>
               <dd className="text-fg">0.5%</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt>Reset at</dt>
+              <dd className="text-fg">$0 equity → {startingCashLabel}</dd>
             </div>
           </dl>
         </article>
