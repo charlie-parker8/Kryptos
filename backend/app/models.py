@@ -35,6 +35,11 @@ class User(Base):
     # the `positions` row until the position closes. Account equity is derived server-side
     # as cash_balance + Σ(open position collateral + unrealized P&L); see app.account.
     cash_balance: Mapped[Decimal] = mapped_column(Numeric(20, 2), nullable=False)
+    # NULL until the emailed confirmation link is redeemed (app.verification). A verified
+    # email is a precondition for opening a position and for entering the leaderboard.
+    email_verified_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
     )
@@ -54,7 +59,13 @@ class User(Base):
         CheckConstraint(
             "char_length(username) BETWEEN 3 AND 32", name="ck_users_username_length"
         ),
+        CheckConstraint("email = lower(email)", name="ck_users_email_lowercase"),
     )
+
+    @property
+    def email_verified(self) -> bool:
+        """Derived — `UserResponse` reads it via `from_attributes`."""
+        return self.email_verified_at is not None
 
 
 class Position(Base):
@@ -196,6 +207,33 @@ class UserSession(Base):
         TIMESTAMP(timezone=True), nullable=False
     )
     revoked_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+
+
+class EmailVerificationToken(Base):
+    """A pending 'confirm your email' link. `token_hash` stores SHA-256(raw token); the raw
+    token lives only in the emailed URL, never in the database (same scheme as
+    user_sessions). Single-use (`consumed_at`) and time-boxed (`expires_at`); see
+    app.verification.
+    """
+
+    __tablename__ = "email_verification_tokens"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False
+    )
+    consumed_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
     )
 

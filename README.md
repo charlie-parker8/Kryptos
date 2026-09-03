@@ -16,7 +16,8 @@ the collateral runs out, and climb a live leaderboard.
 
 ## What it does
 
-- **Email/password auth** with an httponly session cookie.
+- **Email/password auth** with an httponly session cookie; a verified email (one
+  transactional email via Resend) is required to open a position or join the leaderboard.
 - Every account starts with a configurable **$10,000** of fake cash.
 - **Isolated-margin long/short positions**: pick a pair, a side, USD collateral, and a
   leverage preset (2× / 5× / 10×). The position opens at the live price.
@@ -101,6 +102,10 @@ npm run dev
 Add `?mock` to the frontend URL to run the whole app on a deterministic mock feed with no
 backend and no login; `?frozen` also holds animations on one frame (for screenshots).
 
+Leave `KRYPTOS_RESEND_API_KEY` empty locally: `app.mailer` falls back to a null backend
+that logs the verification email (`email(null backend): …`) instead of sending it — copy
+the `/verify?token=…` link from the log to finish verifying a dev account.
+
 ## Tests & checks
 
 ```bash
@@ -109,6 +114,7 @@ cd backend
 uv run ruff check .
 uv run mypy app
 uv run pytest -m "not network and not benchmark"   # needs the docker compose services
+uv run alembic upgrade head && uv run alembic downgrade -1 && uv run alembic upgrade head
 
 # Frontend
 cd frontend

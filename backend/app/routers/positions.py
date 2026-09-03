@@ -120,6 +120,11 @@ async def open_position_endpoint(
     db: AsyncSession = Depends(get_session),  # noqa: B008 — FastAPI's own DI idiom
     redis_client: redis.Redis = Depends(get_redis),  # noqa: B008 — FastAPI's own DI idiom
 ) -> Position:
+    if user.email_verified_at is None:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Verify your email before opening a position.",
+        )
     settings = get_settings()
     try:
         position = await open_position(

@@ -38,6 +38,16 @@ class Settings(BaseSettings):
     price_max_age_seconds: int = 10
     session_ttl_seconds: int = 60 * 60 * 24 * 7  # 7 days
 
+    # Transactional email (Resend). An empty resend_api_key selects the null backend in
+    # app.mailer (logs, no network) — the CI / offline-dev default, mirroring the
+    # deterministic-mock-data allowance for market data. Verification links are built off
+    # `frontend_origin` (the SPA's /verify route); no separate base-URL knob.
+    resend_api_key: str = ""
+    resend_api_base_url: str = "https://api.resend.com"
+    email_from: str = "Kryptos <onboarding@resend.dev>"
+    email_request_timeout_seconds: float = 5.0
+    email_verification_ttl_seconds: int = 60 * 60 * 24  # 24h
+
     # Leveraged-position model. Collateral is committed from cash_balance (free cash) at
     # open; a position is liquidated when its equity (collateral + unrealized P&L) falls to
     # maintenance_margin_rate * notional. Entry/mark/exit/liquidation all price off the

@@ -1,5 +1,7 @@
 import asyncio
 import contextlib
+import logging
+import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Literal
@@ -27,6 +29,25 @@ from app.routers.positions import router as positions_router
 from app.routers.ws import router as ws_router
 
 _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
+def _configure_app_logging() -> None:
+    """Give the `app.*` loggers a stdout handler. uvicorn only configures its own loggers,
+    so without this every `logger.info`/`warning` in the app (leaderboard/price-stream
+    retries, the mailer null backend's verification link, best-effort failures) is silent.
+    """
+    app_logger = logging.getLogger("app")
+    if not app_logger.handlers:
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setFormatter(
+            logging.Formatter("%(levelname)s:     %(name)s: %(message)s")
+        )
+        app_logger.addHandler(handler)
+        app_logger.setLevel(logging.INFO)
+        app_logger.propagate = False
+
+
+_configure_app_logging()
 
 
 @asynccontextmanager

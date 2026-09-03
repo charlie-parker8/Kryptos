@@ -39,6 +39,16 @@ export async function register(
   return user;
 }
 
+export async function requestVerificationEmail(): Promise<void> {
+  await apiPost<null>("/auth/verify/request");
+}
+
+export async function confirmVerification(token: string): Promise<SessionUser> {
+  const user = await apiPost<SessionUser>("/auth/verify/confirm", { token });
+  await mutate(SESSION_KEY, user, { revalidate: false });
+  return user;
+}
+
 export async function logout(): Promise<void> {
   try {
     await apiPost<null>("/auth/logout");
