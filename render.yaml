@@ -60,3 +60,9 @@ services:
       # Optional host-header lockdown. If set, it MUST list every hostname the service
       # answers on, or Render's own health check can 400:
       #   KRYPTOS_ALLOWED_HOSTS   ["api.<your-domain>", "kryptos-api.onrender.com"]
+      - key: KRYPTOS_EMAIL_FROM
+        value: "Kryptos <no-reply@your-domain>"   # once the domain is verified in Resend
+      # Secret — set in the Render dashboard (Environment → Secret), never commit:
+      #   KRYPTOS_RESEND_API_KEY   re_...
+      - key: KRYPTOS_RESEND_API_KEY
+        sync: false
