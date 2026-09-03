@@ -36,7 +36,11 @@ async def send_email(*, to: str, subject: str, html: str, text: str) -> None:
 
 
 async def _send_via_null(*, to: str, subject: str, html: str, text: str) -> None:
-    logger.info("email(null backend): to=%s subject=%r", to, subject)
+    # Dev/CI backend: no network. Log the plain-text body too so a local developer can copy
+    # the /verify?token=… link (docs/deployment.md and the README point here).
+    logger.info(
+        "email(null backend): to=%s subject=%r\n%s", to, subject, text.strip()
+    )
 
 
 async def _send_via_resend(*, to: str, subject: str, html: str, text: str) -> None:
