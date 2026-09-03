@@ -9,6 +9,7 @@ from decimal import Decimal
 
 import redis.asyncio as redis
 from httpx import AsyncClient, Response
+from mailer_capture import verification_token_for
 
 from app.market_data.cache import set_cached_ticker
 from app.market_data.fake import FakeMarketData
@@ -48,17 +49,31 @@ def idem(key: str | None = None) -> dict[str, str]:
     return {"Idempotency-Key": key or str(uuid.uuid4())}
 
 
-async def register(client: AsyncClient) -> dict[str, object]:
+async def register(
+    client: AsyncClient, *, verified: bool = True
+) -> dict[str, object]:
+    """Register a fresh account. `verified=True` (the default) also redeems the verification
+    link from the captured email, so the caller can immediately open positions / rank on the
+    leaderboard; pass `verified=False` to exercise the unverified state.
+    """
+    email = f"{uuid.uuid4()}@example.com"
     response = await client.post(
         "/auth/register",
         json={
-            "email": f"{uuid.uuid4()}@example.com",
+            "email": email,
             "username": f"u{uuid.uuid4().hex[:12]}",
             "password": "correct-horse-1",
         },
     )
     assert response.status_code == 201, response.text
-    return response.json()
+    body: dict[str, object] = response.json()
+    if verified:
+        confirm = await client.post(
+            "/auth/verify/confirm", json={"token": verification_token_for(email)}
+        )
+        assert confirm.status_code == 200, confirm.text
+        body = confirm.json()
+    return body
 
 
 async def open_position(

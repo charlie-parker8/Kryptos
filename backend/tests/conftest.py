@@ -5,6 +5,7 @@ import pytest
 import pytest_asyncio
 import redis.asyncio as redis
 from httpx import ASGITransport, AsyncClient
+from mailer_capture import OUTBOX, SentEmail, capture
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -20,6 +21,15 @@ from app.market_data.kraken import Candle, PairStatus, Ticker
 from app.redis_client import get_redis
 
 TEST_DATABASE_URL = "postgresql+asyncpg://kryptos:kryptos@localhost:5432/kryptos_test"
+
+
+@pytest.fixture(autouse=True)
+def email_outbox(monkeypatch: pytest.MonkeyPatch) -> list[SentEmail]:
+    """Capture every outgoing email instead of sending it. `app.mailer.send_email` is the
+    single monkeypatch point every caller routes through (see app/mailer.py)."""
+    OUTBOX.clear()
+    monkeypatch.setattr("app.mailer.send_email", capture)
+    return OUTBOX
 
 
 @pytest.fixture(scope="session")

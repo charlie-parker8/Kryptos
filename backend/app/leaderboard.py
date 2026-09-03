@@ -162,7 +162,13 @@ async def rebuild(
         await redis_client.delete(PREV_RANKS_KEY)
         await redis_client.hset(PREV_RANKS_KEY, mapping=mapping)
 
-    users = (await db.execute(select(User))).scalars().all()
+    # Only verified accounts rank — mirrors the registration→verify→seed path in
+    # app.routers.auth.confirm_verification, and keeps unverified signups off the board.
+    users = (
+        (await db.execute(select(User).where(User.email_verified_at.is_not(None))))
+        .scalars()
+        .all()
+    )
     if not users:
         return 0
 

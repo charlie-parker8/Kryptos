@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -9,7 +10,8 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app import leaderboard
+from app import leaderboard, mailer, verification
+from app.account import get_account_snapshot
 from app.config import get_settings
 from app.db import get_session
 from app.deps import SESSION_COOKIE_NAME, get_current_user
@@ -25,6 +27,8 @@ from app.security import (
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+logger = logging.getLogger(__name__)
 
 # Per-IP throttles on the unauthenticated surface. Generous enough for real fat-fingering,
 # tight enough to blunt credential stuffing / signup spam.
@@ -113,7 +117,6 @@ async def register(
     payload: RegisterRequest,
     response: Response,
     db: AsyncSession = Depends(get_session),  # noqa: B008 — FastAPI's own DI idiom
-    redis_client: redis.Redis = Depends(get_redis),  # noqa: B008 — FastAPI's own DI idiom
 ) -> User:
     settings = get_settings()
     user = User(
@@ -132,10 +135,17 @@ async def register(
             status.HTTP_409_CONFLICT, _registration_conflict_detail(exc)
         ) from None
 
-    await _issue_session(db, user, response)
-    # New account enters the leaderboard at its starting cash (best-effort; the periodic
-    # rebuild backfills if Redis is briefly down).
-    await leaderboard.update_score(redis_client, user.id, user.cash_balance)
+    raw_token = await verification.issue_token(db, user.id)
+    await _issue_session(db, user, response)  # commits both the session and the token
+    # Best-effort: a mail-provider outage must not fail signup — the user can resend later.
+    # The account enters the leaderboard only once the email is verified (see
+    # confirm_verification and leaderboard.rebuild).
+    try:
+        await mailer.send_verification_email(user.email, raw_token)
+    except mailer.EmailError:
+        logger.warning(
+            "verification email send failed for %s", user.id, exc_info=True
+        )
     return user
 
 
@@ -166,6 +176,66 @@ async def login(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid email or password")
 
     await _issue_session(db, user, response)
+    return user
+
+
+_verify_request_rate_limit = rate_limit(
+    "auth_verify_request", limit=5, window_seconds=3600
+)
+_verify_confirm_rate_limit = rate_limit(
+    "auth_verify_confirm", limit=20, window_seconds=3600
+)
+
+
+class VerifyConfirmRequest(BaseModel):
+    token: str = Field(min_length=16, max_length=512)
+
+
+@router.post(
+    "/verify/request",
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(_verify_request_rate_limit)],
+)
+async def request_verification(
+    user: User = Depends(get_current_user),  # noqa: B008 — FastAPI's own DI idiom
+    db: AsyncSession = Depends(get_session),  # noqa: B008 — FastAPI's own DI idiom
+) -> None:
+    """Re-send the verification email. Authenticated-only, so there is no email in the body
+    and thus no enumeration vector. No-op (still 202) if already verified."""
+    if user.email_verified_at is not None:
+        return
+    raw_token = await verification.issue_token(db, user.id)
+    await db.commit()
+    try:
+        await mailer.send_verification_email(user.email, raw_token)
+    except mailer.EmailError:
+        logger.warning("verification resend failed for %s", user.id, exc_info=True)
+
+
+@router.post(
+    "/verify/confirm",
+    response_model=UserResponse,
+    dependencies=[Depends(_verify_confirm_rate_limit)],
+)
+async def confirm_verification(
+    payload: VerifyConfirmRequest,
+    db: AsyncSession = Depends(get_session),  # noqa: B008 — FastAPI's own DI idiom
+    redis_client: redis.Redis = Depends(get_redis),  # noqa: B008 — FastAPI's own DI idiom
+) -> User:
+    """Redeem a verification link. Unauthenticated (the token is the credential) and POST so
+    a scanner's link prefetch can't burn it. On first success, seed the leaderboard."""
+    result, user = await verification.consume_token(db, payload.token)
+    if result is verification.VerifyResult.INVALID or user is None:
+        await db.rollback()
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "That verification link is invalid or has expired.",
+        )
+    await db.commit()
+    if result is verification.VerifyResult.OK:
+        settings = get_settings()
+        snapshot = await get_account_snapshot(db, redis_client, settings, user)
+        await leaderboard.update_score(redis_client, user.id, snapshot.equity)
     return user
 
 
