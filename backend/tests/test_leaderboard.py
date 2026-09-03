@@ -1,10 +1,12 @@
 import uuid
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
 import redis.asyncio as redis
-from helpers import open_position, set_market_price
+from helpers import open_position, register, set_market_price
 from httpx import AsyncClient
+from mailer_capture import verification_token_for
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app import leaderboard
@@ -17,21 +19,11 @@ def _uid() -> str:
     return f"u{uuid.uuid4().hex[:12]}"
 
 
-async def _register(client: AsyncClient) -> dict[str, object]:
-    response = await client.post(
-        "/auth/register",
-        json={
-            "email": f"{uuid.uuid4()}@example.com",
-            "username": _uid(),
-            "password": "correct-horse-1",
-        },
-    )
-    assert response.status_code == 201
-    return response.json()
-
-
 async def _make_user(
-    session_factory: async_sessionmaker[AsyncSession], *, cash: Decimal
+    session_factory: async_sessionmaker[AsyncSession],
+    *,
+    cash: Decimal,
+    verified: bool = True,
 ) -> uuid.UUID:
     async with session_factory() as session:
         user = User(
@@ -40,6 +32,7 @@ async def _make_user(
             password_hash="not-a-real-hash",
             starting_cash_balance=Decimal("10000.00"),
             cash_balance=cash,
+            email_verified_at=datetime.now(UTC) if verified else None,
         )
         session.add(user)
         await session.commit()
@@ -64,24 +57,31 @@ async def _set_cash(
 
 
 @pytest.mark.asyncio
-async def test_registration_seeds_a_leaderboard_score(
+async def test_registration_seeds_leaderboard_only_after_verification(
     client: AsyncClient, redis_client: redis.Redis
 ) -> None:
-    user = await _register(client)
-
-    score = await redis_client.zscore(leaderboard.ZSET_KEY, str(user["id"]))
-    assert score == pytest.approx(
-        float(Decimal(str(user["starting_cash_balance"])) * 100)
+    email = f"{uuid.uuid4()}@example.com"
+    resp = await client.post(
+        "/auth/register",
+        json={"email": email, "username": _uid(), "password": "correct-horse-1"},
     )
+    uid = resp.json()["id"]
+    assert await redis_client.zscore(leaderboard.ZSET_KEY, uid) is None
+
+    await client.post(
+        "/auth/verify/confirm", json={"token": verification_token_for(email)}
+    )
+    score = await redis_client.zscore(leaderboard.ZSET_KEY, uid)
+    assert score == pytest.approx(float(Decimal("10000.00") * 100))
 
 
 @pytest.mark.asyncio
 async def test_leaderboard_ranks_by_equity_desc(
     client: AsyncClient, redis_client: redis.Redis
 ) -> None:
-    u1 = await _register(client)
-    u2 = await _register(client)
-    u3 = await _register(client)  # client is now authenticated as u3
+    u1 = await register(client)
+    u2 = await register(client)
+    u3 = await register(client)  # client is now authenticated as u3
 
     await leaderboard.update_score(
         redis_client, uuid.UUID(str(u1["id"])), Decimal("15000.00")
@@ -112,8 +112,8 @@ async def test_leaderboard_ranks_by_equity_desc(
 async def test_leaderboard_returns_your_row_when_outside_the_page(
     client: AsyncClient, redis_client: redis.Redis
 ) -> None:
-    others = [await _register(client) for _ in range(3)]
-    viewer = await _register(client)  # client authenticated as viewer
+    others = [await register(client) for _ in range(3)]
+    viewer = await register(client)  # client authenticated as viewer
 
     for i, other in enumerate(others):
         await leaderboard.update_score(
@@ -135,7 +135,7 @@ async def test_leaderboard_returns_your_row_when_outside_the_page(
 
 @pytest.mark.asyncio
 async def test_leaderboard_limit_is_capped_at_100(client: AsyncClient) -> None:
-    await _register(client)
+    await register(client)
 
     assert (await client.get("/leaderboard?limit=100")).status_code == 200
     assert (await client.get("/leaderboard?limit=101")).status_code == 422
@@ -145,7 +145,7 @@ async def test_leaderboard_limit_is_capped_at_100(client: AsyncClient) -> None:
 async def test_empty_leaderboard_is_not_an_error(
     client: AsyncClient, redis_client: redis.Redis
 ) -> None:
-    await _register(client)
+    await register(client)
     await redis_client.flushdb()  # wipe the seed
 
     body = (await client.get("/leaderboard")).json()
@@ -227,6 +227,21 @@ async def test_rebuild_snapshots_previous_ranks(
 
 
 @pytest.mark.asyncio
+async def test_rebuild_excludes_unverified_accounts(
+    redis_client: redis.Redis,
+    test_settings: Settings,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    uid = await _make_user(
+        session_factory, cash=Decimal("9990000.00"), verified=False
+    )
+    await redis_client.flushdb()
+    async with session_factory() as db:
+        await leaderboard.rebuild(db, redis_client, test_settings)
+    assert await redis_client.zscore(leaderboard.ZSET_KEY, str(uid)) is None
+
+
+@pytest.mark.asyncio
 async def test_update_score_swallows_redis_errors(
     redis_client: redis.Redis, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -240,7 +255,7 @@ async def test_update_score_swallows_redis_errors(
 
 
 @pytest.mark.asyncio
-async def test_registration_survives_a_redis_outage(
+async def test_registration_and_verification_survive_a_redis_outage(
     client: AsyncClient, redis_client: redis.Redis, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     async def boom(*_args: object, **_kwargs: object) -> None:
@@ -248,15 +263,18 @@ async def test_registration_survives_a_redis_outage(
 
     monkeypatch.setattr(redis_client, "zadd", boom)
 
+    email = f"{uuid.uuid4()}@example.com"
     response = await client.post(
         "/auth/register",
-        json={
-            "email": f"{uuid.uuid4()}@example.com",
-            "username": _uid(),
-            "password": "correct-horse-1",
-        },
+        json={"email": email, "username": _uid(), "password": "correct-horse-1"},
     )
     assert response.status_code == 201
+
+    # The confirm's leaderboard seed is best-effort — a dead Redis must not 500 it.
+    confirm = await client.post(
+        "/auth/verify/confirm", json={"token": verification_token_for(email)}
+    )
+    assert confirm.status_code == 200
 
 
 @pytest.mark.asyncio
@@ -265,7 +283,7 @@ async def test_opening_a_position_refreshes_the_leaderboard_score(
     redis_client: redis.Redis,
     fake_market_data: FakeMarketData,
 ) -> None:
-    user = await _register(client)
+    user = await register(client)
     await set_market_price(fake_market_data, redis_client, "BTC/USD", "50000")
 
     await redis_client.zadd(leaderboard.ZSET_KEY, {str(user["id"]): 1})  # stale value
