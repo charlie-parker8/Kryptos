@@ -14,12 +14,14 @@ export type {
   PositionValuation,
 } from "@/core/realtime/types";
 
-/** `GET /auth/me`, and the body of `POST /auth/{register,login}`. */
+/** `GET /auth/me`, and the body of `POST /auth/{register,login}` / `POST /auth/verify/confirm`. */
 export interface SessionUser {
   id: string;
   email: string;
   /** unique, chosen at registration; the leaderboard's display name */
   username: string;
+  /** true once the emailed confirmation link has been redeemed; gates opening positions */
+  email_verified: boolean;
   /** free cash — USD not committed as collateral to an open position */
   cash_balance: string;
   starting_cash_balance: string;

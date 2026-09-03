@@ -10,6 +10,7 @@ import { LiquidationToast } from "./LiquidationToast";
 import { MarketLadder } from "./MarketLadder";
 import { TapeTicker } from "./TapeTicker";
 import { ThemeToggle } from "./ThemeToggle";
+import { VerifyEmailBanner } from "./VerifyEmailBanner";
 
 const NAV = [
   { label: "Dashboard", to: "/" },
@@ -52,6 +53,8 @@ export function AppShell() {
           <AccountMenu />
         </div>
       </header>
+
+      <VerifyEmailBanner />
 
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         <aside className="flex shrink-0 flex-col border-b border-border bg-surface-2/40 lg:w-64 lg:overflow-y-auto lg:border-b-0 lg:border-r">

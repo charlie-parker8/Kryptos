@@ -4,6 +4,7 @@ import { RequireAuth } from "@/app/RequireAuth";
 import { AuthLayout } from "@/auth/AuthLayout";
 import { LoginScreen } from "@/auth/LoginScreen";
 import { RegisterScreen } from "@/auth/RegisterScreen";
+import { VerifyScreen } from "@/auth/VerifyScreen";
 import { AppShell } from "@/dashboard/AppShell";
 import { Dashboard } from "@/dashboard/Dashboard";
 import { LeaderboardScreen } from "@/leaderboard/LeaderboardScreen";
@@ -25,6 +26,14 @@ export const router = createBrowserRouter([
     element: (
       <AuthLayout>
         <RegisterScreen />
+      </AuthLayout>
+    ),
+  },
+  {
+    path: "/verify",
+    element: (
+      <AuthLayout>
+        <VerifyScreen />
       </AuthLayout>
     ),
   },

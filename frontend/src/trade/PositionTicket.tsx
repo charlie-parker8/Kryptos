@@ -2,6 +2,7 @@ import { type FormEvent, useRef, useState } from "react";
 
 import { ApiError, apiPost } from "@/core/api/client";
 import type { Position } from "@/core/api/types";
+import { useSession } from "@/core/auth/useSession";
 import { refreshAccount } from "@/core/hooks/useAccount";
 import { refreshPositions } from "@/core/hooks/usePositions";
 import { ASSET_NAME, ASSET_OF } from "@/core/lib/format";
@@ -54,6 +55,9 @@ export function PositionTicket() {
   // cleared once the request resolves or the ticket changes.
   const idempotencyKey = useRef<string | null>(null);
 
+  const { user } = useSession();
+  const emailUnverified = !!user && !user.email_verified; // mock mode has no user -> false
+
   const tick = useTick(pair);
   const freeCash = useFreeCash();
   const asset = ASSET_OF[pair];
@@ -72,7 +76,10 @@ export function PositionTicket() {
       ? Number(collateral) > Number(freeCash)
       : false;
   const blocked =
-    !validCollateral(collateral) || overspend || existing !== undefined;
+    !validCollateral(collateral) ||
+    overspend ||
+    existing !== undefined ||
+    emailUnverified;
 
   function resetIntent() {
     idempotencyKey.current = null;
@@ -247,7 +254,11 @@ export function PositionTicket() {
         </div>
       </dl>
 
-      {existing ? (
+      {emailUnverified ? (
+        <p className="text-xs text-down">
+          Verify your email to open a position — see the banner at the top.
+        </p>
+      ) : existing ? (
         <p className="text-xs text-down">
           You have an open {existing.side} on {pair}. Close it before opening another.
         </p>
@@ -276,7 +287,12 @@ export function PositionTicket() {
 }
 
 function isRejection(err: ApiError): boolean {
-  return err.status === 402 || err.status === 409 || err.status === 422;
+  return (
+    err.status === 402 ||
+    err.status === 403 ||
+    err.status === 409 ||
+    err.status === 422
+  );
 }
 
 function ResultNotice({
