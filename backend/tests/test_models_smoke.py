@@ -1,12 +1,12 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import LedgerEntry, Position, User
+from app.models import EmailVerificationToken, LedgerEntry, Position, User
 
 STARTING_CASH = Decimal("10000.00")
 
@@ -173,5 +173,29 @@ async def test_open_position_with_close_data_rejected(
     db_session.add(
         _make_position(user.id, status="open", close_price=Decimal("1.0"))
     )
+    with pytest.raises(IntegrityError):
+        await db_session.commit()
+
+
+@pytest.mark.asyncio
+async def test_email_verification_token_round_trips(db_session: AsyncSession) -> None:
+    user = _make_user()
+    db_session.add(user)
+    await db_session.flush()
+
+    token = EmailVerificationToken(
+        user_id=user.id,
+        token_hash="a" * 64,
+        expires_at=datetime.now(UTC) + timedelta(hours=24),
+    )
+    db_session.add(token)
+    await db_session.commit()
+    assert token.id is not None
+    assert token.consumed_at is None
+
+
+@pytest.mark.asyncio
+async def test_uppercase_email_rejected(db_session: AsyncSession) -> None:
+    db_session.add(_make_user(email="MixedCase@Example.com"))
     with pytest.raises(IntegrityError):
         await db_session.commit()
