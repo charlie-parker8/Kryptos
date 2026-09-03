@@ -2,12 +2,18 @@ import { memo } from "react";
 
 import { formatPercent, formatSignedUsd, formatUsd, pnlOf } from "@/core/lib/money";
 import { AnimatedNumber } from "@/core/primitives/AnimatedNumber";
+import { SkeletonRows } from "@/core/primitives/Skeleton";
 import { StaleBadge } from "@/core/primitives/StaleBadge";
 import { useDashboardData } from "@/core/useDashboardData";
-import { useOpenPositionIds, usePosition } from "@/core/state/selectors";
+import {
+  useHasAccount,
+  useOpenPositionIds,
+  usePosition,
+} from "@/core/state/selectors";
 
 export function Positions() {
   const ids = useOpenPositionIds();
+  const hasAccount = useHasAccount();
   const { freeCash } = useDashboardData();
 
   return (
@@ -27,11 +33,15 @@ export function Positions() {
         </thead>
         <tbody>
           {ids.length === 0 ? (
-            <tr>
-              <td colSpan={8} className="py-8 text-center text-muted">
-                No open positions — open one from the Trade page.
-              </td>
-            </tr>
+            hasAccount ? (
+              <tr>
+                <td colSpan={8} className="py-8 text-center text-muted">
+                  No open positions — open one from the Trade page.
+                </td>
+              </tr>
+            ) : (
+              <SkeletonRows cols={8} rows={3} />
+            )
           ) : (
             ids.map((id) => <PositionRow key={id} id={id} />)
           )}

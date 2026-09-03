@@ -18,6 +18,7 @@ import {
   type CandleInterval,
   type Pair,
 } from "@/core/realtime/types";
+import { Skeleton } from "@/core/primitives/Skeleton";
 import {
   setChartInterval,
   setChartPair,
@@ -170,7 +171,7 @@ function ChartBody({
   }
 
   if (isLoading || !hasSeed) {
-    return <div className="h-full w-full animate-pulse bg-surface-2/40" />;
+    return <Skeleton className="h-full w-full" rounded="none" />;
   }
 
   return (

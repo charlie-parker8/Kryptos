@@ -2,6 +2,7 @@ import type { LeaderboardEntry } from "@/core/api/types";
 import { useSession } from "@/core/auth/useSession";
 import { useLeaderboard } from "@/core/hooks/useLeaderboard";
 import { formatUsd } from "@/core/lib/money";
+import { SkeletonRows } from "@/core/primitives/Skeleton";
 
 export function LeaderboardScreen() {
   const { standings, you, isLoading, error } = useLeaderboard();
@@ -41,11 +42,7 @@ export function LeaderboardScreen() {
                 </td>
               </tr>
             ) : isLoading || !standings ? (
-              <tr>
-                <td colSpan={4} className="py-8 text-center text-muted">
-                  Loading…
-                </td>
-              </tr>
+              <SkeletonRows cols={4} rows={10} />
             ) : standings.length === 0 ? (
               <tr>
                 <td colSpan={4} className="py-8 text-center text-muted">

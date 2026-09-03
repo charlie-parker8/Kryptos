@@ -7,6 +7,7 @@
 import type { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router";
 
+import { AppShellSkeleton } from "@/app/AppShellSkeleton";
 import { useSession } from "@/core/auth/useSession";
 import { IS_MOCK_MODE } from "@/core/realtime/mode";
 
@@ -17,11 +18,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   if (IS_MOCK_MODE) return <>{children}</>;
 
   if (isLoading) {
-    return (
-      <div className="grid min-h-dvh place-items-center bg-bg text-muted">
-        <span className="font-mono text-sm tracking-wide">Loading…</span>
-      </div>
-    );
+    return <AppShellSkeleton />;
   }
 
   if (!isAuthenticated) {
