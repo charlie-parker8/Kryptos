@@ -63,7 +63,7 @@ Add two records at your DNS provider (fill in the targets from steps 4 and 5):
 5. TLS is handled by `KRYPTOS_DATABASE_SSL=true` (set in `render.yaml`); nothing else to do.
 
 Free-tier note: the project **pauses after 7 days of no activity** and must be resumed from
-the dashboard. The keep-alive job (step 6) prevents this as long as it keeps running.
+the dashboard. The keep-alive job (step 7) prevents this as long as it keeps running.
 
 ## 3. Render Key Value (Redis)
 
@@ -120,7 +120,37 @@ or migrate; if a database with the old spot schema exists, drop it (`DROP SCHEMA
 CASCADE; CREATE SCHEMA public;`) before the first deploy, and `FLUSHDB` the Key Value
 store.
 
-## 5. Vercel (SPA)
+## 5. Resend (email)
+
+Kryptos sends one transactional email — the "confirm your address" link. A verified email
+is required before an account can open a position or appear on the leaderboard. With
+`KRYPTOS_RESEND_API_KEY` unset the API still boots and runs; `app.mailer` uses a null
+backend that logs the send and delivers nothing (fine for a staging box, not for prod).
+
+1. Create a [Resend](https://resend.com) account. **Add a sending domain** and put the SPF +
+   DKIM DNS records it shows into your DNS (step 1). Until the domain verifies, Resend only
+   sends from `onboarding@resend.dev` to your own account address.
+2. Create a **Sending** API key.
+3. In Render (Environment tab, `kryptos-api`):
+
+   | Key | Value |
+   |-----|-------|
+   | `KRYPTOS_RESEND_API_KEY` | `re_…` — mark as **Secret**, never commit |
+   | `KRYPTOS_EMAIL_FROM` | `Kryptos <no-reply@<domain>>` — must be on the verified domain |
+
+4. `0002_email_verification` runs via the existing `alembic upgrade head` in
+   `docker-entrypoint.sh`. A greenfield DB applies it instantly. A pre-existing dev DB with
+   mixed-case emails needs `UPDATE users SET email = lower(email);` **before** the upgrade —
+   the new `ck_users_email_lowercase` CHECK will otherwise fail.
+5. Smoke test: register → the verify banner shows and Trade's **Open** is disabled with an
+   in-app notice; try opening a position anyway → `403`. Pull the link from the Resend
+   dashboard (or, on the null backend, the app log line `email(null backend): …`) → open it
+   → the banner clears and Open works.
+
+Troubleshooting: Resend `403`/`422` on every send → the domain or `KRYPTOS_EMAIL_FROM` isn't
+verified. Verification link points at `localhost` → `KRYPTOS_FRONTEND_ORIGIN` is wrong.
+
+## 6. Vercel (SPA)
 
 1. **Add New → Project** → the repo.
 2. **Root Directory: `frontend`.** Framework preset: Vite (auto-detected). Build command
@@ -137,7 +167,7 @@ store.
 and the security headers. `frontend/public/theme-init.js` is external (not inline) so the
 CSP stays `script-src 'self'`.
 
-## 6. Keep-alive
+## 7. Keep-alive
 
 `.github/workflows/keepalive.yml` is already in the repo. Enable it:
 
@@ -150,12 +180,13 @@ A run turns red on HTTP 503 (Postgres unreachable) or no response — that doubl
 uptime alert. GitHub may delay cron by 5–15 min and disables schedules after 60 days of repo
 inactivity.
 
-## 7. Smoke test
+## 8. Smoke test
 
 Against `https://app.<domain>`:
 
 1. Register a new account → you land on the dashboard at **$10,000** equity with live
-   BTC/ETH/SOL prices.
+   BTC/ETH/SOL prices, and a "verify your email" banner. Redeem the emailed link (see
+   step 5) → the banner clears.
 2. DevTools → Application → Cookies: `kryptos_session` is `Secure`, `HttpOnly`,
    `SameSite=Lax`, no `Domain` attribute, on `api.<domain>`.
 3. DevTools → Network → WS: the `wss://api.<domain>/ws` connection is `101 Switching
