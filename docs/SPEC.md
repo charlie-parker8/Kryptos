@@ -1,4 +1,4 @@
-# docs/SPEC.md
+# Kryptos spec
 
 Crypto **leveraged** paper-trading web app: real-time cryptocurrency market prices, fake money, no real trades ever execute. Users open isolated-margin long/short positions with leverage; the server marks, prices, and liquidates them. See `docs/leverage-model.md` for the full position / P&L / margin / liquidation / bankruptcy rules.
 
@@ -24,7 +24,7 @@ Crypto **leveraged** paper-trading web app: real-time cryptocurrency market pric
 - **Realtime transport**: WebSockets (FastAPI native) — `price_tick` / `candle_update` broadcast, `account_update` / `position_update` / `bankruptcy_reset` per-user.
 - **Market data**: Kraken's public REST API (Ticker/AssetPairs/OHLC, no auth) and WebSocket v2 API (ticker/OHLC streaming) for spot pair prices, through one adapter module so the provider can be swapped without touching business logic. Entry, mark, exit and liquidation all price off Kraken `last` (there is no bid/ask spread in this model). Runtime uses real provider data; deterministic mock data is permitted only for automated tests and offline development. Kraken's terms on bulk redistribution are not fully confirmed — re-verify before public launch.
 - **Frontend**: React + TypeScript (strict)
-- **Testing**: pytest (backend), Playwright via the `webapp-testing` skill (frontend/e2e)
+- **Testing**: pytest (backend), Playwright (frontend/e2e)
 
 ## Financial correctness invariants
 Non-negotiable — changes to these definitions require your explicit approval before implementation:
@@ -68,8 +68,8 @@ short. No trading fee in the MVP (`KRYPTOS_TAKER_FEE_BPS = 0`, knob retained). C
 - Type-annotate all Python; keep `mypy app` clean. TypeScript stays in strict mode (`npm run typecheck` clean).
 - Add unit and integration tests alongside any change. Any code touching cash, positions, or liquidation needs tests covering the invariants above, especially boundary cases: exact-free-cash opens, one-per-pair rejection, concurrent/duplicate opens, and user-close-vs-liquidation races.
 - Pure money-calculation unit tests may run without a database (`test_positions_math.py`). Tests of transactions, locking, idempotency, database constraints, concurrent opens, or the liquidation engine must use a real PostgreSQL test database rather than mocked persistence.
-- Before claiming a task done, actually run the relevant tests and confirm their output using the `verification-before-completion` skill; do not infer pass or fail.
-- User-visible flows (open long, open short, close, liquidation, leaderboard, bankruptcy reset) get a Playwright check via the `webapp-testing` skill when touched.
+- Before claiming a task done, actually run the relevant tests and confirm their output; do not infer pass or fail.
+- User-visible flows (open long, open short, close, liquidation, leaderboard, bankruptcy reset) get a Playwright check when touched.
 
 ## Benchmark plan
 `docs/metrics-benchmark-plan.md` tracks the metrics this project backs with real numbers.

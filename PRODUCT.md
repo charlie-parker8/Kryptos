@@ -85,14 +85,14 @@ real exchange. No cross-margin, no funding rates, no partial closes, no hedged p
 
 Existing: Python/FastAPI + PostgreSQL + Redis backend (already built). Frontend (this
 work): **Vite + React + TypeScript (strict) + TailwindCSS** — set in docs/SPEC.md and
-confirmed with the user, who also asked for a light/dark toggle on the shipped design and
+agreed upfront, along with asked for a light/dark toggle on the shipped design and
 an "animated" live-update feel (rolling numbers, directional flash, live ticker).
 
 ## Brand Commitments
 
 - Name: **Kryptos**. No existing logo, wordmark, palette, or typography — visually
   greenfield.
-- Voice (from docs/SPEC.md's own register and the frontend-design guidance): plain, active,
+- Voice (from the spec's own register): plain, active,
   specific. Controls name their action; errors name the problem and the fix; empty states
   invite action. It is a game, so a little competitive edge in copy is welcome, but the
   numbers are never played for laughs.
