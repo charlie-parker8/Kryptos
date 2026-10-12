@@ -177,8 +177,19 @@ CSP stays `script-src 'self'`.
    "Run workflow" to confirm it's green.
 
 A run turns red on HTTP 503 (Postgres unreachable) or no response — that doubles as a free
-uptime alert. GitHub may delay cron by 5–15 min and disables schedules after 60 days of repo
-inactivity.
+uptime alert. GitHub may delay cron by 5–15 min (or skip runs) and disables schedules after
+60 days of repo inactivity.
+
+**Why the Action alone isn't enough.** Render's free web service spins down after 15 min
+with no inbound request, and a green Action run only proves one ping landed — not that the
+gaps between runs stayed under 15 min. So there are two layers:
+
+1. **Self-ping (primary).** While awake, the API requests its own *public* `/health` every
+   5 min (`backend/app/keepalive.py`). Set by `KRYPTOS_SELF_PING_URL` in `render.yaml`
+   (`https://api.<domain>/health`); unset = disabled (dev/tests). It must be the public
+   URL — loopback traffic doesn't pass through Render's proxy, so it wouldn't count.
+2. **The Action (wake-up + alert).** Every ~5 min (offset minutes). It's what wakes the
+   instance after a deploy or restart, when no process is alive to self-ping.
 
 ## 8. Smoke test
 
@@ -227,7 +238,9 @@ cycle failures there.
 service is ~720–744h, so run only the one. Render Key Value free: 25 MB, 50 connections,
 no persistence. Supabase: 500 MB, 2 projects. Vercel Hobby: non-commercial use only.
 
-**Cold starts.** With the keep-alive job running, the instance stays warm. If it lapses, the
+**Cold starts.** With the self-ping and keep-alive job running, the instance stays warm.
+Every push to `main` still redeploys (`autoDeployTrigger: commit`), which is a cold boot
+(`alembic upgrade head` + stream warm-up) by itself. If both keep-warm layers lapse, the
 first request after 15 min idle takes ~30–60 s, and for the first few seconds after wake the
 Kraken stream hasn't refilled the price cache, so opens/closes return `stale_price`
 (invariant 10) — and the liquidation engine is paused — until it does. Expected, self-heals

@@ -18,6 +18,7 @@ from starlette.responses import JSONResponse
 from app.candle_stream import run_candle_stream
 from app.config import get_settings
 from app.db import AsyncSessionLocal
+from app.keepalive import run_self_ping
 from app.leaderboard import run_leaderboard_refresh
 from app.price_stream import run_price_stream
 from app.redis_client import redis_client
@@ -58,6 +59,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         asyncio.create_task(run_leaderboard_refresh(settings, redis_client)),
         asyncio.create_task(run_candle_stream(settings, redis_client)),
     ]
+    if settings.self_ping_url:
+        tasks.append(asyncio.create_task(run_self_ping(settings)))
     try:
         yield
     finally:

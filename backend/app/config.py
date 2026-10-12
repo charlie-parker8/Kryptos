@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     # fine for local dev; set KRYPTOS_ALLOWED_HOSTS='["api.<domain>"]' in the hosted env.
     allowed_hosts: list[str] = Field(default_factory=lambda: ["*"])
 
+    # Keep-warm self-ping (app.keepalive). Set to the service's *public* /health URL in the
+    # hosted env so Render's free-tier idle timer (15 min) keeps getting reset; unset (the
+    # default) disables it, so dev and tests never ping anything.
+    self_ping_url: str | None = None
+    self_ping_interval_seconds: int = 300
+
     starting_cash_balance: Decimal = Decimal("10000.00")
     price_max_age_seconds: int = 10
     session_ttl_seconds: int = 60 * 60 * 24 * 7  # 7 days
