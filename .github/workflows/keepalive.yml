@@ -1,7 +1,13 @@
 name: keep-alive
 
-# Pings the API's /health every ~10 min so the free Render instance doesn't spin down and
-# the free Supabase project doesn't pause (the health check runs SELECT 1 + Redis PING).
+# Pings the API's /health every ~5 min so the free Render instance doesn't spin down (it
+# does after 15 min with no inbound request) and the free Supabase project doesn't pause
+# (the health check runs SELECT 1 + Redis PING).
+#
+# This is the wake-up call + uptime alert, NOT the primary keeper: the API also pings its own
+# public URL while awake (backend/app/keepalive.py, KRYPTOS_SELF_PING_URL), because GitHub's
+# cron alone leaves gaps > 15 min. Minutes are offset (:03, :08, ...) to dodge the :00/:05
+# marks where scheduled runs queue up the worst.
 #
 # Setup: repo Settings → Secrets and variables → Actions → Variables → New variable
 #   KEEPALIVE_URL = https://api.<your-domain>/health
@@ -12,7 +18,7 @@ name: keep-alive
 
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "3-58/5 * * * *"
   workflow_dispatch:
 
 permissions:

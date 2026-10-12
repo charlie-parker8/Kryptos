@@ -60,6 +60,11 @@ services:
       # Optional host-header lockdown. If set, it MUST list every hostname the service
       # answers on, or Render's own health check can 400:
       #   KRYPTOS_ALLOWED_HOSTS   ["api.<your-domain>", "kryptos-api.onrender.com"]
+      # Keep-warm: the app requests its own public /health every 5 min so Render's 15-min
+      # idle spin-down never fires (the GitHub Actions cron alone is too jittery). Must be
+      # the public URL — loopback traffic doesn't reset Render's idle timer.
+      - key: KRYPTOS_SELF_PING_URL
+        value: https://api.playkryptos.com/health
       - key: KRYPTOS_EMAIL_FROM
         value: "Kryptos <no-reply@playkryptos.com>"   # must be on the Resend-verified sending domain
       # Secret — set in the Render dashboard (Environment → Secret), never commit:
